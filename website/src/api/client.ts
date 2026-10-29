@@ -131,6 +131,7 @@ export type {
   McpBodyFieldsData,
   SafetySwitchKey,
   SafetySwitchesState,
+  SshAgentConsentStatus,
   DeniedCommandsData,
   GovernanceScopeDetail,
   GovernanceScope,

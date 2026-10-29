@@ -166,7 +166,8 @@ const API_KEY_ORDER = [
   'updateDashboardConfig', 'createTheme', 'installTheme', 'installThemeZip', 'updateTheme',
   'deleteTheme', 'themeDetail', 'themeBoot', 'updateThemeConfig',
   'voiceConfig', 'updateVoiceConfig', 'voiceVoices', 'voiceSystemVoices',
-  'awsConsent', 'grantAwsConsent', 'revokeAwsConsent', 'credentialRedaction',
+  'awsConsent', 'grantAwsConsent', 'revokeAwsConsent', 'sshAgentConsent',
+  'grantSshAgentConsent', 'revokeSshAgentConsent', 'credentialRedaction',
   'setCredentialRedaction', 'setCredentialRedactionEngine', 'setCredentialRedactionSeams', 'safetySwitches', 'setSafetySwitch', 'setProjectHooksConsent', 'getProjectHooksConsent', 'revealRedactedValue', 'configPending', 'applyConfigPending',
   'discardConfigPending', 'mcpBodyFields', 'allowMcpBodyField', 'removeMcpBodyField',
   'voiceSynthesize', 'voiceCancel', 'channelsList',
@@ -267,7 +268,7 @@ const NO_SESSION_KEY = [
   'changelog', 'releases', 'armStatus', 'fileDiff',
   'fileSearch', 'pathComplete', 'uploadFiles', 'uploadToDirectory', 'themes',
   'dashboardConfig', 'themeDetail', 'themeBoot', 'voiceConfig',
-  'voiceVoices', 'voiceSystemVoices', 'awsConsent', 'credentialRedaction', 'channelsList', 'channelPresets',
+  'voiceVoices', 'voiceSystemVoices', 'awsConsent', 'sshAgentConsent', 'credentialRedaction', 'channelsList', 'channelPresets',
   'channelGet', 'listApps', 'getApp', 'getAppManifest',
   'uninstallPreview', 'listRegistry', 'listRegistries',
 ]
