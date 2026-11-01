@@ -20563,6 +20563,7 @@
         "ssh_agent_since": "{{time}} से",
         "ssh_agent_save_failed": "SSH एजेंट सेटिंग सहेजी नहीं जा सकी।",
         "ssh_agent_load_failed": "यह नहीं पढ़ा जा सका कि सत्र तुम्हारे SSH एजेंट का उपयोग कर सकते हैं या नहीं।",
+        "ssh_agent_owner_only": "केवल डैशबोर्ड का मालिक ही देख या बदल सकता है कि सत्र SSH एजेंट का उपयोग कर सकते हैं या नहीं।",
         "credential_redaction_section": "फ़ाइल व्यू में क्रेडेंशियल रिडैक्शन",
         "credential_redaction_toggle": "डैशबोर्ड द्वारा तुम्हारे लिए खोली गई फ़ाइलों में क्रेडेंशियल छिपाओ",
         "safetySwitches": {
