@@ -60,11 +60,16 @@ FORBIDDEN_BEFORE_THE_LIST = (
 #: (the two servers sat one module under their old ceilings, and ``mcp-core`` and
 #: ``mcp-guide`` had room). The redactor runs on the listing's output, so the import cannot
 #: move behind the list.
+#: Raised by 1 for ``mcp-cron`` (356 to 357), ``mcp-guide`` (350 to 351) and ``mcp-mate``
+#: (351 to 352): the listing already loads ``security.argv_floor_self``, and its self-kill
+#: check imports ``security.argv_floor_pager`` (the ``git grep`` pager read) at module
+#: level, so the deny floor is whole wherever the security package is. ``mcp-core`` had
+#: room.
 PACKAGE_MODULE_CEILING = {
     "mcp-core": 485,
-    "mcp-cron": 356,
-    "mcp-guide": 350,
-    "mcp-mate": 351,
+    "mcp-cron": 357,
+    "mcp-guide": 351,
+    "mcp-mate": 352,
 }
 
 #: The modules that read the two live values in the spawn tools' descriptions. They are
