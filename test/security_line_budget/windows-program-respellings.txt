@@ -1,0 +1,5 @@
++63
+The deny view tries a Windows program word without its .exe/.cmd/.bat suffix, at the
+program word past sudo/env-style wrappers and cmd /c, and inside a quoted cmd /c or /k
+line; it folds an in-word cmd ^ or PowerShell backtick. The s3 download reader and the
+scratch rm view accept the same suffixed spellings. Views only add matches.
