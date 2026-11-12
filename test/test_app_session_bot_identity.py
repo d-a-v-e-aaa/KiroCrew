@@ -18,7 +18,7 @@ import asyncio
 import json
 import logging
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from aiohttp import web
@@ -28,7 +28,7 @@ from chat_test_helpers import drain_background_tasks
 
 from kiro_crew.config.loader import KiroCrewAgentConfig, KiroCrewConfig
 from kiro_crew.config.sections import MemoryStoreConfig
-from kiro_crew.dashboard import chat_runner
+from kiro_crew.dashboard import chat_runner, slot_ownership
 from kiro_crew.dashboard.chat_utils import APP_AGENT_REFUSED_KIND
 from kiro_crew.dashboard.slot_ownership import slot_ownership_middleware
 from kiro_crew.execution_context import (
@@ -173,11 +173,22 @@ async def test_a_bot_name_stamped_on_an_app_session_is_refused_at_turn_admission
     await asyncio.to_thread(_add_bots, monkeypatch)
     state = _turn_state(tmp_path, monkeypatch)
     slot = state.get_or_create_slot("shop-1", agent=bot, app=APP)
+    recorder = MagicMock()
+    monkeypatch.setattr(slot_ownership, "sel", lambda: recorder)
 
     await _finished(chat_runner._run_chat(state, slot, "hi"), "the chat turn")
     await _finished(drain_background_tasks(state), "the background tasks draining")
 
     await _assert_nothing_of_a_bot(state, slot)
+    # The refusal is filed as the app-isolation row every other app denial writes.
+    recorder.log_api_access.assert_called_once_with(
+        caller=APP,
+        operation="chat_runner.turn_admission",
+        outcome="denied",
+        source=slot_ownership.APP_ISOLATION_SOURCE,
+        resources=f"slot={slot.key}",
+        error=slot_ownership.BOT_IDENTITY_DENIED,
+    )
     assert not [m for m in slot.messages if m["role"] == "assistant"]
     refusals = [m for m in slot.messages if m["role"] == "error"]
     assert [m["content"] for m in refusals] == [chat_runner.APP_BOT_TURN_REFUSAL]

@@ -33,6 +33,7 @@ if TYPE_CHECKING:
         QueuedReadUnavailable,
         QueuedRun,
         QueuedRunListing,
+        _record_isolation_denial,
         _redact,
         _run_belongs_to_caller,
         _sel,
@@ -154,6 +155,56 @@ def _queued_run_payload(queued: QueuedRun) -> dict[str, object]:
     return data
 
 
+def _app_token_caller(request: web.Request) -> str:
+    """The app an app-token request acts for, else ``""``.
+
+    ``""`` for the dashboard owner (an empty claim) and for an internal caller,
+    whose reach is its own session's (:func:`_spawn_scope_refusal`). An app token
+    is neither: it is not the owner, and it presents no session of its own.
+    """
+    if request.get("internal_auth") is True:
+        return ""
+    app = request.get("app")
+    return app if isinstance(app, str) else ""
+
+
+def _app_token_parent_refusal(
+    request: web.Request, parent_session: str, operation: str
+) -> web.Response | None:
+    """The answer for an app token naming a parent session that is not its own.
+
+    A run reports into its parent session and takes that session's trust, so an
+    app token names only a session the app owns, resolved in that key's namespace
+    (``token_auth_callers.app_owner_of_session_key``). No parent at all is allowed,
+    as the App Kit SDK starts its runs. The body is the one an internal caller
+    gets for a session it cannot vouch for.
+    """
+    app = _app_token_caller(request)
+    if not app or not parent_session:
+        return None
+    from kiro_crew.dashboard.token_auth_callers import app_owner_of_session_key
+
+    state = request.app["state"]
+    owner = app_owner_of_session_key(
+        getattr(state, "_slots", None),
+        parent_session,
+        getattr(getattr(state, "crons", None), "_jobs", None),
+        getattr(getattr(state, "subagents", None), "_agents", None),
+    )
+    if owner == app:
+        return None
+    _record_isolation_denial(
+        app, operation, "parent_session", "the parent session is not the app's"
+    )
+    return web.json_response(
+        {
+            "error": "The execution identity is unavailable; Global memory was not used.",
+            "code": "member_identity_unavailable",
+        },
+        status=409,
+    )
+
+
 async def _spawn_scope_refusal(
     request: web.Request, *, claimed_session: str | None = None
 ) -> web.Response | None:
@@ -163,18 +214,22 @@ async def _spawn_scope_refusal(
     check, whatever memory store its identity resolved to and whether it resolved
     one at all: a verified Global-memory session is still only the owner of its
     own runs, and a caller that presented no ``X-Session-Key`` owns no run a
-    session started. Only the dashboard owner (cookie auth, no ``internal_auth``)
-    is admitted without it, because that surface IS the owner. Refusals answer
-    404 ``task_scope_denied`` so a run id is never confirmed to a caller that may
-    not see it; the identity-less refusal says why, since a wrong run id and a
-    missing identity are indistinguishable from the caller's side otherwise.
+    session started. Only the dashboard owner (cookie auth, no ``internal_auth``,
+    no app claim) is admitted without it, because that surface IS the owner. An
+    app token is not the owner: it reaches only a run recorded under its own app
+    (the run's ``app``, as the listing bounds it), whatever session started it.
+    Refusals answer 404 ``task_scope_denied`` so a run id is never confirmed to a
+    caller that may not see it; the identity-less refusal says why, since a wrong
+    run id and a missing identity are indistinguishable from the caller's side
+    otherwise.
     """
     scope, refusal = await internal_memory_scope(
         request, "spawn.access", claimed_session=claimed_session
     )
     if refusal is not None:
         return refusal
-    if request.get("internal_auth") is not True:
+    app_token = _app_token_caller(request)
+    if request.get("internal_auth") is not True and not app_token:
         return None  # the dashboard owner's own surface
     caller = request.headers.get("X-Session-Key", "")
     state = request.app["state"]
@@ -189,20 +244,27 @@ async def _spawn_scope_refusal(
         except QueuedReadUnavailable:
             return _queue_unreadable()
     parent: object
+    # The app the run is recorded under; ``None`` when nothing records one.
+    run_app: object = None
     # One order, stated once: the live run, then a spawn the gate is still
     # holding, then the persisted record, then a harness-native card.
     if info is not None:
         parent = info.parent_session_key
+        run_app = getattr(info, "app", "")
     elif queued is not None:
         # A spawn the gate is still holding has no run folder yet; its row's
         # session key is the originating session, the field the live branch
         # reads from ``info``.
         parent = queued.parent_session_key
+        run_app = queued.app
     elif (record := await asyncio.to_thread(read_state, run_id)) is not None:
         # The persisted record spells the field ``parent_session``
         # (``subagent_persistence.write_state``). A record that lacks it is an
         # unknown owner, not a parentless run: ``None`` stays ``None``.
         parent = record.get("parent_session")
+        from kiro_crew.subagent_persistence import _record_app
+
+        run_app = _record_app(record)
     else:
         # A harness-native child has no managed run and no persisted record; its
         # ownership is the dashboard slot that tracks its card. Anything else
@@ -212,6 +274,13 @@ async def _spawn_scope_refusal(
         # caller's identity is that slot's session key, ``dashboard:<slot>``.
         slot = card.get("slot") if isinstance(card, dict) else None
         parent = f"dashboard:{slot}" if isinstance(slot, str) and slot else None
+    if app_token:
+        if isinstance(run_app, str) and run_app == app_token:
+            return None
+        _record_isolation_denial(
+            app_token, "spawn.access", f"run={run_id}", "the run was not started by this app"
+        )
+        return web.json_response({"error": "not found", "code": "task_scope_denied"}, status=404)
     if _run_belongs_to_caller(caller, run_id, parent):
         return None
     _sel().log_api_access(
@@ -405,6 +474,8 @@ async def api_spawn_lost(request: web.Request) -> web.Response:
     _, refusal = await internal_memory_scope(
         request, "spawn.batch", claimed_session=spawn_parent_claim(request, parent_session)
     )
+    if refusal is None:
+        refusal = _app_token_parent_refusal(request, parent_session, "spawn.batch")
     if refusal is not None:
         return refusal
     from kiro_crew.dashboard.card_send import card_turn_seen
@@ -453,6 +524,8 @@ async def api_spawn_mark_collected(request: web.Request) -> web.Response:
     _, refusal = await internal_memory_scope(
         request, "spawn.batch", claimed_session=spawn_parent_claim(request, parent_session)
     )
+    if refusal is None:
+        refusal = _app_token_parent_refusal(request, parent_session, "spawn.batch")
     if refusal is not None:
         return refusal
     # Only a mark sent after its reply frame was written changes anything: a

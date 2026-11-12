@@ -84,6 +84,44 @@ def split_cron_agent_member(
     return agent_id, member_id
 
 
+def app_schedule_names_bot(agent_id: str, member_id: str, *, maker_session: str = "") -> bool:
+    """Whether a schedule an app is creating would run as a Bot.
+
+    The create entries that carry an app claim ask this before anything is stored:
+    ``POST /api/crons`` from an app token, and the ``cron_add`` tool called from a
+    session, a scheduled run or a background run that belongs to an app
+    (*maker_session*). The name is classified exactly as the create would
+    classify it (:func:`split_cron_agent_member`); a member selection is refused
+    when its execution is a Bot's own
+    (``execution_context.is_bot_own_execution``), since an app does not reach a
+    Bot's memory or chat by naming the Bot. A session that already runs on that
+    Bot's store keeps scheduling as itself, and a member the config cannot
+    resolve is left to the create, which refuses it in its own words.
+
+    Reads the configuration and the maker's execution record from disk, so an
+    ``async`` caller hands this function to ``asyncio.to_thread``.
+    """
+    from kiro_crew.config.loader import KiroCrewConfig
+    from kiro_crew.execution_context import (
+        is_bot_own_execution,
+        read_session_execution,
+        resolve_member_execution,
+    )
+
+    config = KiroCrewConfig.load()
+    _agent, member = split_cron_agent_member(agent_id, member_id, config=config)
+    if not member:
+        return False
+    try:
+        target = resolve_member_execution(config, member)
+        maker = read_session_execution(maker_session) if maker_session else None
+    except (OSError, ValueError):
+        return False
+    if maker is not None and maker.store == target.store:
+        return False
+    return is_bot_own_execution(target, config)
+
+
 def build_cron_session_context(job: CronJob) -> tuple[str, str]:
     """Compute (session_key, prompt) for one cron run.
 

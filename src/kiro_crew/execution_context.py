@@ -641,6 +641,32 @@ def validate_execution(
     return execution
 
 
+def is_bot_own_execution(execution: ExecutionContext | None, config: Any = None) -> bool:
+    """Whether *execution* runs on what is a Bot's own: its memory store or its chat.
+
+    A record that carries a Bot's id runs on that Bot's private store, whatever
+    template it names. A ``member`` record with no id is a Bot's own when it is
+    bound to a store other than the shared one, or when it chats on the conductor
+    (a Bot with its own file, ``mate_worker.is_conductor_execution``). A ``member``
+    record on the shared store with a plain template (the reserved ``default``
+    row, a row the agent sync wrote) has nothing of its own. The rule an app is
+    held to wherever it names an agent: it does not reach a Bot's own by naming
+    the Bot (``apps.cron_sdk``, ``apps.spawn_sdk``, ``slot_ownership``).
+    """
+    if execution is None:
+        return False
+    if execution.member_id is not None:
+        return True
+    if execution.selection_kind != "member":
+        return False
+    from kiro_crew.mate_worker import is_conductor_execution
+    from kiro_crew.memory_stores import DEFAULT_MEMORY_STORE
+
+    return execution.store.store_id != DEFAULT_MEMORY_STORE or is_conductor_execution(
+        execution, config
+    )
+
+
 def derive_execution(
     parent: ExecutionContext,
     *,

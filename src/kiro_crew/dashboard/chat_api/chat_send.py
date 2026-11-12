@@ -556,13 +556,14 @@ async def _api_chat_send(request: web.Request) -> web.StreamResponse:
         user_meta = {"sendId": _card_sid} if _card_sid else None
     # An app's auto-created slot must not land on a transcript it does not own:
     # its first save would stamp the app onto that transcript's metadata line.
+    # Nor does an app's own session take a Bot's name (``_app_send_names_bot``).
     if (
         _requested_key
         and existing is None
         and await _app_claim_refused(
             state, request.get("app", ""), "chat_send", (_history_key_for(_requested_key),)
         )
-    ):
+    ) or await _app_send_names_bot(request_app, agent, existing, _requested_key):
         return slot_not_found()
     if (
         existing is not None
@@ -598,8 +599,6 @@ async def _api_chat_send(request: web.Request) -> web.StreamResponse:
     ):
         _emit_agent_assignment(str(slot_name or ""), str(agent), outcome="denied_invalid")
         return web.json_response({"error": "invalid agent name"}, status=400)
-    if await _app_send_names_bot(request_app, agent, existing, _requested_key):
-        return slot_not_found()
 
     # Honor memory_mode from the body when auto-creating a slot (e.g. AgentRock
     # skill dispatch defaults to "temporary"). Only validated values are passed
