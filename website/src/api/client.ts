@@ -176,6 +176,7 @@ export type {
   InstanceView,
   AddInstanceBody,
   RelayCrewEntry,
+  RelayViewerAccount,
 } from './client/instances'
 export { filenameFromDisposition } from './client/instances'
 export type {
