@@ -25,6 +25,7 @@ import re
 # the reader module rather than bound here at import: the facade mirrors a patch
 # onto the owning module's namespace, so a name bound into THIS namespace would
 # keep resolving the unpatched object and the instrument would count nothing.
+from . import argv_rules as _argv_rules
 from . import shell_normalizer as _shell_normalizer
 from .argv_floor_hosts import _GLOB_CHARS, _host_is_self
 from .argv_floor_self import (
@@ -120,9 +121,58 @@ _HOSTNAME_VARIABLE_FORMS: tuple[str, ...] = ("$hostname", "${hostname}")
 _FLAT_SUBSTITUTION_RE = re.compile(r"\$\(([^()`$]*)\)|`([^`()$]*)`")
 
 
+#: Characters that end a gate word: a blank, a command separator, a parenthesis
+#: or a backtick.  A ``[`` opens a bracket class and a ``]`` closes it; between
+#: them a separator is part of the word (``s[s)]h`` is one word).
+_GATE_WORD_SEPARATORS = frozenset(";&|()`")
+
+
+def _gate_words(probe: str, *, group_brackets: bool) -> "list[str]":
+    """Cut *probe* into words at blanks and the separators in ``_GATE_WORD_SEPARATORS``.
+
+    With *group_brackets*, a ``[`` opens a bracket class that ``;&|()`` and a
+    backtick cannot end (``s[s)]h`` stays one word) and a ``]`` closes it; a
+    blank still ends the word.  A second ``[`` while one is open just reopens
+    it, so a long run of ``[`` with no ``]`` is one linear pass, not a quadratic
+    rescan.  A single plain character walk, no regex.
+    """
+    words: list[str] = []
+    word: list[str] = []
+    depth = 0
+    for ch in probe:
+        if group_brackets and ch == "[":
+            depth = 1
+            word.append(ch)
+        elif group_brackets and ch == "]":
+            depth = 0
+            word.append(ch)
+        elif ch.isspace() or (depth == 0 and ch in _GATE_WORD_SEPARATORS):
+            if word:
+                words.append("".join(word))
+                word = []
+        else:
+            word.append(ch)
+    if word:
+        words.append("".join(word))
+    return words
+
+
 def _glob_can_name_ssh_verb(probe: str) -> bool:
-    """True when a glob word in *probe* can expand to an ssh-family program."""
-    for word in probe.split():
+    """True when a glob word in *probe* can expand to an ssh-family program.
+
+    Words end at blanks and at the characters that start a command (``;`` ``&``
+    ``|`` a parenthesis or a backtick), so a verb glued to a substitution opener
+    (``$(s?h``, ``x=$(s?h``) or a separator (``true;s?h``) is still a word.  Three
+    readings are joined, so each finer one only adds words: the blank-separated
+    words, the words cut at those characters, and the same cut with a bracket
+    class kept whole (``s[s\\)]h``, alone or glued to an opener).
+    """
+    words = {
+        *probe.split(),
+        *_gate_words(probe, group_brackets=False),
+        *_gate_words(probe, group_brackets=True),
+    }
+    for word in words:
         if not _GLOB_CHARS.intersection(word):
             continue
         base = word.rsplit("/", 1)[-1]
@@ -1009,14 +1059,19 @@ def _function_call_binds_self(text: str) -> bool:
     return False
 
 
-def _reaches_self_over_ssh(text_lower: str) -> bool:
+def _reaches_self_over_ssh(text_lower: str, raw_text: "str | None" = None) -> bool:
     """:func:`_is_ssh_to_self` on *text_lower* and on each quoted assignment script in it,
-    read whole: the separator mask would turn a script's own separators into data."""
+    read whole: the separator mask would turn a script's own separators into data.
+    *raw_text* is the command as submitted, for the wrapper option words."""
     scripts = _quoted_assignment_scripts(text_lower)
-    return _is_ssh_to_self(text_lower, own_line=True) or any(map(_is_ssh_to_self, scripts))
+    return _is_ssh_to_self(text_lower, own_line=True, raw_text=raw_text) or any(
+        map(_is_ssh_to_self, scripts)
+    )
 
 
-def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
+def _is_ssh_to_self(
+    text_lower: str, *, own_line: bool = False, raw_text: "str | None" = None
+) -> bool:
     """True if *text_lower* opens an ssh/scp/sftp/rsync channel to THIS host.
 
     Structural for the same reason the other floors are: the target hides
@@ -1065,6 +1120,9 @@ def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
     # has no live substitution opener before the splices below rewrite it: a spliced
     # static output (``x'y``) could otherwise pair into quotes around a live one.
     literal = own_line and _only_single_quoted_openers(text_lower)
+    # The words as written, when the line had upper case (see the frame loop).
+    cased_text = raw_text if raw_text is not None and raw_text != text_lower else None
+    same_case = raw_text is not None and cased_text is None
     # Collapse empty expansions in the SOURCE so the gate and tokenization both
     # read the spliced-out spelling (``s$()sh localhost`` -> ``ssh localhost``).
     text_lower = _EMPTY_EXPANSION_RE.sub("", text_lower)
@@ -1141,8 +1199,28 @@ def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
     # frames (a copy staged in a wrapper payload reaches its siblings); a
     # copy staged in an EARLIER command line is the documented residual.
     bound_program_verbs: "dict[str, str]" = {}
-    for tokens in _self_token_frames(text_lower, literal):
+    frames = _self_token_frames(text_lower, literal)
+    # A wrapper's option words are read in the case they were written in
+    # (``sudo -H`` takes no value, ``sudo -h`` does), so the caller's own line
+    # goes through the same rewrites into frames that keep its case.  A line
+    # with no upper case is its own cased frames.  Where a cased frame does not
+    # lower to the frame read here word for word (a rewrite that only matched
+    # one spelling), that frame keeps today's lowered reading; so does every
+    # line the floor reaches by recursion, which has no submitted text.
+    cased_frames: "list[list[str] | None]" = [tokens if same_case else None for tokens in frames]
+    if cased_text is not None:
+        cased_text = _EMPTY_EXPANSION_RE.sub("", cased_text)
+        cased_text = _FLAT_SUBSTITUTION_RE.sub(_splice_static_substitution, cased_text)
+        cased_text = _mask_quoted_separators(_resolve_line_assignments(cased_text))
+        cased_all = _self_token_frames(cased_text, literal)
+        if len(cased_all) == len(frames):
+            cased_frames = [
+                cased if [t.lower() for t in cased] == tokens else None
+                for cased, tokens in zip(cased_all, frames)
+            ]
+    for tokens, cased_tokens in zip(frames, cased_frames):
         programs = _argv_programs(tokens)
+        executed = _argv_rules._executed_program_indices(tokens, cased_tokens)
         # A leading ``RSYNC_RSH=<cmd>`` environment assignment selects rsync's
         # remote shell exactly like ``-e``/``--rsh``, but rides BEFORE the verb
         # so the operand walk below never sees it.  When rsync runs live, that
@@ -1179,19 +1257,35 @@ def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
         disqualified: "bool | None" = None
         for i, token in enumerate(tokens):
             verb = _ssh_family_verb(token)
-            # A verb read through a bare glob (``s?h``, a lone ``*``) expands only
-            # in the working directory, so it already spends the one filesystem
-            # expansion this floor models and a glob operand after it is not read
-            # as this host.  Two wildcard words in a row are every five-field cron
+            # A glob that bash does not run and that ends its command (``git add
+            # *; curl localhost:3000``) is that command's last operand, not an
+            # ssh verb whose operand scan would run on past the ``;``.
+            if (
+                verb is not None
+                and _ssh_verb_basename(token) != verb
+                and i not in executed
+                and token.endswith((";", "|"))
+            ):
+                verb = None
+            # A bare glob (``s?h``) that bash RUNS -- program
+            # position, or the program a wrapper runs (``env s?h``) -- is an ssh
+            # verb whose glob operands (``local*``) keep host glob matching.  The
+            # same glob as another program's operand (``tar … s* *.*``,
+            # ``find s* l*``) is a filename: it already spends the one filesystem
+            # expansion this floor models, so a glob after it is not read as this
+            # host.  Two wildcard words in a row are every five-field cron
             # schedule (``0 * * * *``), and a working directory that expands both
             # into a self connection also makes a lone ``*`` that whole command
             # line, which no static floor reads.  A verb glob with a directory part
             # (``/usr/bin/s?h``) expands outside it, so its operands keep glob
-            # host matching.
+            # host matching.  A word of only ``*`` keeps the filename reading
+            # wherever it sits: it is the field of a cron schedule
+            # (``* * * * * root …``) far more often than a program.
             glob_verb = (
                 verb is not None
                 and _ssh_verb_basename(token) != verb
                 and not any(sep in token for sep in "/\\")
+                and (i not in executed or not token.strip("*"))
             )
             if verb is None and bound_program_verbs:
                 stripped_prog = token.strip("\"'")
