@@ -565,5 +565,6 @@
   "pages.overview.skillsTab.also_dismiss_older_updates",
   "components.grillCard.minutes",
   "components.notifications.systemNote.moved_to_history_startup_body",
-  "components.notifications.systemNote.moved_to_history_idle_body"
+  "components.notifications.systemNote.moved_to_history_idle_body",
+  "pages.membersPage.profile_starters_left_out"
 ]
