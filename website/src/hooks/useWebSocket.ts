@@ -71,12 +71,13 @@ import {
 import { DASHBOARD_FIELDS_FRAME, handleDashboardFields } from './websocket/dashboardFields'
 import { useChatStream } from './websocket/chatStream'
 import { useTurnCompletion } from './websocket/turnCompletion'
-import { attachFocusRelay, focusedSlotForCurrentSurface } from './websocket/attention'
+import { attachFocusRelay, focusedSlotForCurrentSurface, recordShown } from './websocket/attention'
 import { emitAppReload, emitChannelEvent, emitComputerUseFrame, emitCronHistory, emitResumeAllDone } from './websocket/browserEvents'
 import { createReconnectSnapshotWait, runFirstConnect, runReconnectCatchUp, type ReconnectSnapshotWait } from './websocket/reconnectCatchUp'
 import { browserLiveStore } from './useBrowserLive'
 import { applySharedCrewFrame, onSharedCrewSocketOpen, setSharedCrewSender } from './sharedCrew/sharedCrewSocket'
 import { batchedUnlessOpen } from '../lib/streamBatch'
+import { ackRead } from '../lib/readOutbox'
 import { noteCrewSteerReceipt } from '../lib/crewSteerNotice'
 
 /* The dashboard's single multiplexed WebSocket. `useWebSocket` composes the
@@ -256,6 +257,7 @@ export function useWebSocket() {
         syncPendingQuestions: cards.syncPendingQuestions,
         syncWorkflowRuns,
         focusedSlot: focusedSlotForCurrentSurface,
+        recordShown,
         reconnectSnapshot,
       }
       if (socket.wasConnectedRef.current) {
@@ -688,9 +690,12 @@ export function useWebSocket() {
             // by a message NEWER than what the reader saw stays lit, and a
             // manual mark-as-unread is never cleared remotely. remoteSlotRead
             // (never the emitter) so a relayed read can't echo back out.
-            const r = data as { slot?: string; read_ts?: string }
+            const r = data as { slot?: string; read_ts?: string; stored?: boolean }
             if (typeof r.slot === 'string' && r.slot) {
-              dispatch(remoteSlotRead({ slot: r.slot, readTs: typeof r.read_ts === 'string' && r.read_ts ? r.read_ts : undefined }))
+              const readTs = typeof r.read_ts === 'string' && r.read_ts ? r.read_ts : undefined
+              // Only the echo sent once the gateway's write lands confirms a kept read.
+              if (r.stored === true) ackRead(r.slot, readTs)
+              dispatch(remoteSlotRead({ slot: r.slot, readTs }))
             }
             break
           }
@@ -1258,6 +1263,7 @@ export function useWebSocket() {
       buffers.flushForUnmount()
       socket.closeForUnmount()
       voice.dispose()
+      slotList.dispose()
       detachQuestionRetirements()
       detachVoice()
       detachFocus()
@@ -1269,7 +1275,7 @@ export function useWebSocket() {
       chunkWatch.dispose()
       if (chunkWatchRef.current === chunkWatch) chunkWatchRef.current = null
     }
-  }, [socket, connect, voice, buffers, cards, queryClient, reconnectSnapshot])
+  }, [socket, connect, voice, buffers, cards, queryClient, reconnectSnapshot, slotList])
 
   return { subscribeLogs: socket.subscribeLogs, subscribeSubagents: socket.subscribeSubagents, forceReconnect }
 }

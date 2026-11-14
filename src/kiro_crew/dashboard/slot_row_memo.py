@@ -111,6 +111,11 @@ class RowSummary(NamedTuple):
     last_conv_role: str
     last_activity_ts: str
     last_agent_ts: str
+    #: The newest assistant reply, what badges a crewmate thread.
+    last_reply_ts: str = ""
+    #: The newest agent row or terminal error, what badges any other chat.
+    last_unread_ts: str = ""
+    unread_failed: bool = False
 
 
 def summarize_rows(
@@ -122,6 +127,7 @@ def summarize_rows(
     strip_options: Callable[[str], str],
     is_system_notice: Callable[[str, dict], bool],
     last_message_preview: Callable[[str], str],
+    retry_kind: str,
 ) -> RowSummary:
     """Scan *rows* newest-first for every transcript-derived field of the row."""
     # The newest DURABLE row: a transient row (the turn-end ``done`` row
@@ -152,6 +158,9 @@ def summarize_rows(
     # for readers that ask "did the agent act after X", which a user prompt
     # must not answer (the artifact freshness nudge).
     last_agent_ts = ""
+    last_reply_ts = ""
+    last_unread_ts = ""
+    unread_failed = False
     found_conv = False
     # A goal-loop cycle's prompt is a ``nudge`` row, and a cycle that ends with
     # ``nothing_to_do`` writes no reply after it. The loop has run past an
@@ -165,8 +174,15 @@ def summarize_rows(
             cycle_after_reply = True
         if not last_activity_ts and role not in transient_roles and not notice:
             last_activity_ts = message.get("ts") or ""
-        if not last_agent_ts and role in ("tool_call", "tool_result", "assistant") and not notice:
+        agent = role in ("tool_call", "tool_result", "assistant") and not notice
+        if not last_agent_ts and agent:
             last_agent_ts = message.get("ts") or ""
+        if not last_reply_ts and role == "assistant" and not notice:
+            last_reply_ts = message.get("ts") or ""
+        kind = msg_meta.get("kind") if isinstance(msg_meta, dict) else None
+        failed = role == "error" and retry_kind not in (kind, message.get("kind"))
+        if not last_unread_ts and (agent or failed):
+            last_unread_ts, unread_failed = message.get("ts") or "", failed
         if role in ("user", "assistant") and not notice:
             text = message.get("content") or ""
             if text:
@@ -201,6 +217,9 @@ def summarize_rows(
         last_conv_role=last_conv_role,
         last_activity_ts=last_activity_ts,
         last_agent_ts=last_agent_ts,
+        last_reply_ts=last_reply_ts,
+        last_unread_ts=last_unread_ts,
+        unread_failed=unread_failed,
     )
 
 
