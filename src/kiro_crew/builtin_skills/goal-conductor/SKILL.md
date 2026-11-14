@@ -200,8 +200,9 @@ Your FIRST reply to a goal is the plan itself — never a round of questions.
 Restate the goal, add a **State** line (what main, the issue and open or linked
 PRs already have, from one read; "nothing to check" when there is no repo
 state), list the work items with their acceptance conditions, name the
-concurrency, and list your assumptions as **Assumptions** the user can correct
-in the same breath. Then stop and wait for exactly one go-ahead. Every item's
+concurrency as one number (how many items run at once), and list your
+assumptions as **Assumptions** the user can correct in the same breath. Then
+stop and wait for exactly one go-ahead. Every item's
 seed asks the worker for the same look-then-plan as its first report, in five
 lines (Ask, State, Items with acceptance, Not doing, Risks), and to keep going
 after it.
@@ -770,10 +771,13 @@ no-progress check replace the old per-round pause. Count both from
 `work_ledger_read`, not from memory, and read the goal's item total from its
 `conductor.goal_items_used`, not by counting `items`:
 
-- **Concurrency cap.** `resource_status` decides the wave; a bound the user
-  set is `concurrency_cap` (`work_ledger_record` `action=goal`
-  `concurrency_cap=<N>`, 1 to 32), written before the first `create`. With no
-  bound set, it is the ledger's own 32. The ledger enforces it: a `create`
+- **Concurrency cap.** `resource_status` decides the wave, and
+  `concurrency_cap` (`work_ledger_record` `action=goal`
+  `concurrency_cap=<N>`, 1 to 32) bounds it. Write it with the goal record,
+  before the first `create`: the number the user set, else the concurrency
+  your approved plan named. A plan that says "two or three" writes 3. Raise it
+  only when the user says so, never on your own. With nothing written, it is
+  the ledger's own 32. The ledger enforces it: a `create`
   past the cap is refused with `goal_concurrency_cap_reached`. That refusal is
   about how much runs in parallel, never about the total: keep patrolling what
   is in flight and dispatch the next item when one lands. Never ask to raise
