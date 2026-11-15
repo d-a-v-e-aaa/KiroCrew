@@ -7090,11 +7090,118 @@ must be `https://` (plain `http://` only to a loopback host), no redirect is
 followed, and an answer over 1 MiB is refused. The plan does not yet name an
 app's crons, MCP servers or agents, nor a bundled component's path, so those
 stay empty and such an app is refused (`market_undeclared_capability`, or a
-malformed component) until the API carries them. No route or dashboard view
-calls it yet.
+malformed component) until the API carries them. It also answers
+`ListListings` (one page: items and `nextCursor`) and `GetListing` (one
+`ListingView` by ref) for the App Store's Kiro Space source below.
+
+### 31a. A Kiro Space store is an App Store source the build offers
+
+A build that can reach a Kiro Space store sets one aiohttp key,
+`app["market_registries"]`, to a provider (`apps/market_registries.py`,
+`MarketRegistryProvider`): `offers()` (`[{id, label, web}]`, on the loop, no
+child process), `status(id)` (`{state: signed_in | needs_sign_in | no_access |
+unknown, account, detail?}`, in the executor; `detail` is `cli_missing` or
+`cli_outdated` when `state` is `unknown` for that reason), `client(id)` (on the loop, memory only;
+never `None`, raises `market_signed_out`; the object is both a `MarketClient`
+and a `MarketReader`), `sign_in(id)` and `sign_out(id)` (in the executor). The
+open-source build sets no provider and ships no store address. A build sets
+the key in its `contribute_routes`, never in `start_services`: core's startup
+hook that sets the install factory runs before a `start_services` hook, so a
+provider set there leaves every install at `503 market_client_unavailable`.
+
+`sign_in(id)` returns at once, with `state`, the device `code` and the
+`approvalPage`; it never blocks until the person approves, and nothing reads
+the sign-in view again. While a code is shown the dashboard re-reads
+`GET /api/apps/market/registries` every 3 seconds for up to 10 minutes and
+treats `status(id) == signed_in` as the end. So a provider must make `status`
+report `signed_in` as soon as the sign-in completes (drop any cached negative
+snapshot then). A failed or expired sign-in is not read back: the row shows,
+next to the code, the hint to ask the store's team for access, and after 10
+minutes says the sign-in did not finish. A provider may answer `failed` or
+`expired` from `sign_in` itself when it knows at once.
+
+`config.json` keeps only the added store ids, top-level `market_registries`
+(a list of strings), never an address: the address is in the provider's code,
+and `config.json` is agent-writable. It is separate from the git `registries`
+list, so no reader of `_effective_registries()` has to skip a row with no git
+URL. The rule of §15 still holds: what is listed and what can be installed read
+one list. Every store route and the install factory call
+`require_usable_registry`: the id must be in `market_registries` AND in
+`offers()`, else `market_registry_unavailable`.
+
+`app["market_client_factory"]` is set by core, in an `app.on_startup` hook
+(`routes_market_registry.register_market_client_factory`), only when a provider
+is present: core registers its routes before a build contributes the provider.
+The factory reads the added ids from the live config snapshot (no I/O), so it
+can lag a write to `market_registries` by one watcher reload; it refuses
+unless exactly one usable store is added, and returns `client(<id>)`.
+`shortcut:` one store per Kiro Crew; give the factory an id, and record the
+store on the installed app, when a second store exists.
+
+Routes in `apps/routes_market_registry.py`, each behind
+`require_owner_dashboard_request` before the body is read, registered before
+`/api/apps/{name}`:
+
+| Route | Answer |
+|---|---|
+| `GET /api/apps/market/registries` | `{offers, added, status}`; no provider: `offers: []`, `added: []` |
+| `PUT /api/apps/market/registries` | `{added: [id]}` sets the offered ids; an id not offered is `400 market_registry_unknown`; an id the file holds that is not offered now is kept as it is (the owner cannot see it) and the factory ignores it; removing an id drops its cached rows |
+| `POST /api/apps/market/registries/{id}/signin`, `/signout` | the provider's sign-in view (`state`, `reason`, `code`, `approvalPage`, https only); body must be `{}`; sign-in and sign-out drop the store's cached rows |
+| `GET /api/apps/market/listings?registry=<id>` | card rows, `truncated`, `status`, and `account`: the account the rows were read for (`""` with no rows). Rows come only under a `signed_in` status, from the cache entry of that status's account. A status of `needs_sign_in` or `no_access`, read first or after a failed read, answers no rows and only that `status`. Any other status (`unknown`: the store or its status probe is down) makes no new read and answers no rows, the `status` and `error.code` `market_unavailable`, on a plain read and on `refresh=1` alike. Every status read (this route, the detail, the registries read) drops the store's cached rows when it is `needs_sign_in` or `no_access`, or `signed_in` with another account than the last one seen; each such drop, and each sign-in and sign-out, moves the store to a new generation. A read records the generation and the account of the status its client was built from; when it ends it reads the status again, and if the generation moved or that status no longer names the same `signed_in` account, it caches nothing and answers no rows and that fresh `status` (with `market_unavailable` for `unknown`). While `signed_in`, a failed read answers `error.code` and a fresh `status`, with this account's saved rows only while that fresh status still names it and the generation has not moved; `refresh=1` reads again and replaces the rows only when that read succeeds |
+| `GET /api/apps/market/listing?registry=<id>&ref=<ref>` | one listing row with the download count, uncached, and `account` (whose listing it is, `""` without one); only under `signed_in`, and a read that ends after the store changed hands (as above) answers no listing and the fresh `status` |
+
+Without a provider every route but the first answers `503
+market_registry_unavailable`, and the install routes keep answering `503
+market_client_unavailable`. Store calls run in the executor. Nothing logged or
+answered carries a token or the store CLI's output.
+
+The listing read pages `ListListings(kind=app, limit=100)` up to 10 pages and
+marks `truncated` when a cursor is left. Rows are cached in process memory only,
+an hour, keyed by store id and account; a disk copy in the data home would be a
+row an agent could rewrite. A row is installed only when an installed app's
+source is `market:<that ref>@<n>`; an installed app of the same name from any
+other source marks `nameTaken`. Store rows are never merged with git rows by
+name. The list row's download count is `absent` (the list's copy is not a real
+count yet); the detail shows it, or `unavailable`.
+
+A git catalog row whose installed app has a `market:` source carries
+`installedFrom: "market"` and never `updateAvailable`
+(`registry_pipeline/catalog._enrich_with_install_status`, read by both store
+listings and the update notes), so the git card cannot reinstall it from git.
+For the same reason `update_status.published_index` gives a `market:` install
+no `update` field: `GET /api/apps/<name>`, the installed list and the App SDK
+never tell such an app that a git version is out.
+
+Each added store is one more source in the App Store rail. Picking it shows
+only that store's block; a git source hides every store block; the category
+and installed-only filters apply to store rows (a row's category is
+`categoryFor([category, ...tags])`). The rail's counts (All apps, each
+category, Installed) count store rows beside git rows, under the search box:
+every added store's rows for All sources, only the picked store's rows for a
+store source, none for a git source. Store rows count only from a current
+answer (below). A
+category only store rows have is added to the rail, and the picked category
+stays on it even with no match. The store's own rail row follows the search box like a git source.
+The page keys every store query, list and detail, by store and the account
+the store's current status (`GET /api/apps/market/registries`) names (`''`
+unless `signed_in`). An answer is current when it and that status are both
+`signed_in` and its `account` and its status's account equal the status's
+account; the block's rows, the rail counts, the listing page and every
+Install show only a current answer. When a store's account or state changes,
+the page drops that store's list and detail queries kept for any other
+account, and an answer whose status disagrees with the current one re-reads
+the statuses. A Refresh writes its answer only when the query it started from
+still holds the same answer, so a late Refresh never puts older rows back.
+The block shows the sign-in card only for `needs_sign_in` and `no_access`. For
+`unknown` it shows no rows and the read error, or the status line when the
+status names a `detail` (the CLI is missing or too old).
+
+Each added store's sign-in lives under `<data home>/market-registries/<id>`
+(`registry_data_dir`), masked in every sandbox mode (security spec).
 
 Writers: `apps/marketplace_install.py`, `apps/market_client.py`,
-`apps/market_source.py`,
+`apps/market_source.py`, `apps/market_registries.py`,
+`apps/routes_market_registry.py`,
 `apps/manager_install.py` (`install_app`, `market_source` / `source_commit`),
 `apps/registry_pipeline/catalog.py` (`resolve_installed_trust_repository`).
 
