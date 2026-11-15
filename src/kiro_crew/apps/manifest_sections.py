@@ -19,6 +19,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+from kiro_crew.apps.chat_launch import ChatLaunch, parse_chat_launch
 from kiro_crew.apps.desktop_capabilities import declared_capabilities
 from kiro_crew.apps.manifest_names import KEBAB_RE
 from kiro_crew.apps.user_session_reach import declared_verbs
@@ -598,6 +599,11 @@ class Permissions:
     #: chat runner, its queue, stop, archive and AutoNudge loops on those slots.
     #: Shown at the trust prompt.
     chatSlots: bool = False  # noqa: N815
+    #: The one shape of the person's chat its page may create or reopen through
+    #: ``POST /api/chat/slots`` without declaring that path: a key prefix, the
+    #: agents, an optional folder and the memory modes (``apps/chat_launch.py``).
+    #: Shown at the trust prompt. ``None`` when absent or malformed.
+    chatLaunch: ChatLaunch | None = None  # noqa: N815
     #: May hold a bounded, audited auto-approve grant on the app's OWN worker
     #: slots through ``ctx.auto_approve`` (``apps/worker_auto_approve.py``).
     #: Shown at the trust prompt and held back on a widening update like a new
@@ -653,6 +659,8 @@ class Permissions:
             d["agentTurns"] = True
         if self.chatSlots:
             d["chatSlots"] = True
+        if self.chatLaunch is not None:
+            d["chatLaunch"] = self.chatLaunch.to_dict()
         if self.workerAutoApprove:
             d["workerAutoApprove"] = True
         if self.reachableByUserSessions:
@@ -693,6 +701,7 @@ class Permissions:
             proposeCrewmate=data.get("proposeCrewmate") is True,  # noqa: N815
             agentTurns=data.get("agentTurns") is True,  # noqa: N815
             chatSlots=data.get("chatSlots") is True,  # noqa: N815
+            chatLaunch=parse_chat_launch(data.get("chatLaunch")),  # noqa: N815
             workerAutoApprove=data.get("workerAutoApprove") is True,  # noqa: N815
             reachableByUserSessions=declared_verbs(data.get("reachableByUserSessions")),
             desktopCapabilities=declared_capabilities(data.get("desktopCapabilities")),
