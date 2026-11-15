@@ -117,6 +117,19 @@
         "route": "/spec-builder",
         "icon": "ClipboardList"
       }
+    },
+    {
+      "name": "md-notebook",
+      "repository": "https://github.com/KiroCrewCaptain/kirocrew-app-md-notebook",
+      "commit": "6d4dd236db6deebd20d9fc6c028d295a0e11b982",
+      "version": "1.0.1",
+      "treeSha256": "e8e57523afb6564907c2533e6ab8dcb1ea11ac8bf58cb416671cfc18f634b6dc",
+      "archiveSha256": "4b599240b5b76d0bf7336faa11c573ca3c4ba00965714aea290ffa2ebd323e90",
+      "minAppSdkLevel": 8,
+      "legacyNav": {
+        "route": "/md-notebook",
+        "icon": "NotebookPen"
+      }
     }
   ]
 }
