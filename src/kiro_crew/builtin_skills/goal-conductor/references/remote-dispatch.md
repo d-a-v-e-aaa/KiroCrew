@@ -66,10 +66,11 @@ it again to retry. A remote row adds `worker_instance_id`, `crew_state`,
 
 **Reports reach you by a pull.** The hub pulls the worker's latest report from
 each open remote item's crew and files it as an ordinary report, so
-`accept_eval.py`, `accept` and `close` work as for a local item. A background
-puller does this every 30 seconds with no model turn, so a remote `done`,
-`blocked`, `question` or `reply` wakes your work-ledger patrol like a local
-one; a `work_ledger_read` pulls too. Each pull is best effort (a read takes at
+`accept_eval.py`, `accept` and `close` work as for a local item. Your
+work-ledger patrol pulls once per tick, before it reads the ledger, with no
+model turn, so a remote `done`, `blocked`, `question` or `reply` wakes you at
+the next tick like a local one; a `work_ledger_read` pulls too. Nothing pulls
+between ticks, so keep the patrol running while a remote item is open. A lost crew's retire is also checked only on a pull, so it can land up to one patrol interval late. Each pull is best effort (a read takes at
 most 32 items in about 6 seconds). Only the latest report is filed: a status
 the worker passed through between two pulls never reaches you, and a row whose
 pull failed keeps its last state.
