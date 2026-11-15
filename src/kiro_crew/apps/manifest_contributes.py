@@ -1553,6 +1553,16 @@ class Contributes:
     #: serialized.
     bad_link_open: bool = False
     dropped_link_open: int = 0
+    #: MCP servers this app offers to a Bot's own chat (``kiro_crew.bot_chat_app_tools``):
+    #: each ``{"agent", "server"}`` names a server one of the app's own agents declares.
+    #: Nothing mounts from this alone: the owner approves the ``tools`` Bot scope and
+    #: ticks the Bot (``apps.bot_grants``).
+    #: shortcut: the entry is read from that agent's rendered spec, so the app keeps an
+    #: agent that declares it; move to a top-level declaration that no ordinary session
+    #: mounts once an app needs a server with no agent of its own.
+    botChatServers: list[dict[str, str]] = field(default_factory=list)  # noqa: N815
+    #: ``botChatServers`` present but not a list of ``{agent, server}`` strings. Not serialized.
+    bad_bot_chat_servers: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {}
@@ -1588,6 +1598,8 @@ class Contributes:
         kept_opens = [o for o in opens if o]
         if kept_opens:
             d["linkOpen"] = kept_opens
+        if self.botChatServers:
+            d["botChatServers"] = [dict(s) for s in self.botChatServers]
         return d
 
     @classmethod
@@ -1629,7 +1641,20 @@ class Contributes:
         composer_entries = composer_raw if isinstance(composer_raw, list) else []
         opens_raw = data.get("linkOpen", [])
         open_entries = opens_raw if isinstance(opens_raw, list) else []
+        chat_raw = data.get("botChatServers", [])
+        chat_servers = [
+            {"agent": s["agent"], "server": s["server"]}
+            for s in (chat_raw if isinstance(chat_raw, list) else [])
+            if isinstance(s, dict)
+            and isinstance(s.get("agent"), str)
+            and isinstance(s.get("server"), str)
+            and s["agent"]
+            and s["server"]
+        ]
         return cls(
+            botChatServers=chat_servers,
+            bad_bot_chat_servers="botChatServers" in data
+            and (not isinstance(chat_raw, list) or len(chat_servers) != len(chat_raw)),
             messageActions=[
                 MessageActionConfig.from_dict(a) for a in action_entries if isinstance(a, dict)
             ],
@@ -1861,6 +1886,11 @@ class Contributes:
         for link_open in self.linkOpen:
             errors.extend(link_open.validate())
         errors.extend(self._validate_selection_actions())
+        if self.bad_bot_chat_servers:
+            errors.append(
+                "contributes.botChatServers must be an array of {agent, server} "
+                "objects with non-empty string values"
+            )
         return errors
 
     def _validate_selection_actions(self) -> list[str]:

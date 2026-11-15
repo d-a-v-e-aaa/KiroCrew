@@ -260,3 +260,17 @@ def deferred_call_arguments(params: Any, server: str, tool: str) -> tuple[Any, b
     from kiro_crew.acp._dispatch import _workspace_call_arguments
 
     return _workspace_call_arguments(params, server, tool)
+
+
+def stamp_session_label(entry: dict[str, Any], label: str) -> dict[str, Any]:
+    """*entry* (an MCP server entry the caller owns) carrying *label* as its session label.
+
+    Drops the session-label marker and sets the label env var, the same spelling
+    every harness hands a server (``acp.session_label``). Mutates and returns *entry*.
+    """
+    from kiro_crew.acp.session_label import SESSION_LABEL_ENV, SESSION_LABEL_MARKER
+
+    entry.pop(SESSION_LABEL_MARKER, None)
+    env = entry.get("env")
+    entry["env"] = {**(env if isinstance(env, dict) else {}), SESSION_LABEL_ENV: label}
+    return entry

@@ -65,7 +65,21 @@ async def handle_update_app(request: web.Request) -> web.Response:
     that source) is the consent proof from an ``app_trust_local_only`` refusal:
     the app's local-only grant is switched to that repository for the update and
     put back if the update fails (:mod:`kiro_crew.apps.local_trust_switch`).
+
+    A Bot chat whose app tools the update takes away or adds catches up on its next
+    turn (``bot_chat_app_tools``).
     """
+    from kiro_crew import bot_chat_app_tools
+
+    name = request.match_info["name"]
+    before = await bot_chat_app_tools.snapshot(name)
+    resp = await _update_app(request)
+    await bot_chat_app_tools.after_app_change(request.app.get("state"), name, before)
+    return resp
+
+
+async def _update_app(request: web.Request) -> web.Response:
+    """:func:`handle_update_app` itself."""
     # Deferred like the gate below: the switch reaches the trust writer in the
     # dashboard handlers package, which imports this route family.
     from kiro_crew.apps import local_trust_switch

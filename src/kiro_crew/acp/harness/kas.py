@@ -111,7 +111,7 @@ from kiro_crew.kiro_cli import (
     resolved_kiro_cli_version,
     standalone_kiro_cli,
 )
-from kiro_crew.mate_worker import MATE_WORKER_AGENT
+from kiro_crew.mate_worker import MATE_CONDUCTOR_AGENT, MATE_WORKER_AGENT
 from kiro_crew.mcp_gateway import session_servers as session_servers_mod
 from kiro_crew.platform.tool_names import kas_verified_releases, kas_vocabulary_drift
 
@@ -1339,6 +1339,12 @@ class KasHarness(MembershipHarness):
                     # Refused, never the bare base: what could not be read may
                     # hold the crewmate's own limits.
                     raise AcpAgentUnavailable(str(exc), agent=agent) from exc
+            elif agent == MATE_CONDUCTOR_AGENT:
+                # A Bot's own chat: the shared conductor plus the app servers its
+                # owner turned on for THIS Bot (``bot_chat_app_tools``), per session.
+                from kiro_crew.bot_chat_app_tools import conductor_session_spec
+
+                spec = conductor_session_spec(spec, session_key)
             # KAS loads workspace steering itself, honouring each file's inclusion, from
             # the session's own folder (a subagent's may differ from the runtime's).
             steering_dir = session_cwd or work_dir

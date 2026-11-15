@@ -21,6 +21,7 @@ import { compareText } from '../i18n/format'
 const SCOPE_TEXT: Record<string, () => string> = {
   read: () => i18nT('pages.appDetailPage.bots_scope_read'),
   wake: () => i18nT('pages.appDetailPage.bots_scope_wake'),
+  tools: () => i18nT('pages.appDetailPage.bots_scope_tools'),
 }
 
 /** The declared Bot scopes outside the approved set (`approvedGrants.bots` is omitted while empty). */

@@ -78,10 +78,12 @@ async def handle_bot_grants(request: web.Request) -> web.Response:
             },
             status=400,
         )
+    from kiro_crew import bot_chat_app_tools
     from kiro_crew.apps.manager import app_lifecycle_lock
 
     try:
         async with app_lifecycle_lock(name):
+            before = await bot_chat_app_tools.snapshot(name)
             stored = await asyncio.to_thread(set_app_granted_bots, name, bots)
     except (OSError, ValueError):
         logger.warning("could not save an app's ticked Bots", exc_info=True)
@@ -90,6 +92,9 @@ async def handle_bot_grants(request: web.Request) -> web.Response:
         )
     if stored is None:
         return _not_installed(name)
+    # A Bot ticked or unticked for an app offering tools gains or loses them on its
+    # chat's next turn (``bot_chat_app_tools``).
+    await bot_chat_app_tools.after_app_change(request.app.get("state"), name, before)
     sel().log_api_access(
         caller=str(request.get("user", "") or "dashboard"),
         operation="apps.bot_grants.write",

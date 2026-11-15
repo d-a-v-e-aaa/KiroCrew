@@ -7543,6 +7543,21 @@ cannot tell a Bot it was not given from one that does not exist:
 A disabled app holds no Bot scope: `apps/bot_grants.app_bot_scopes` reads
 `is_app_enabled` on every call (pinned by `test_app_bot_disabled_token.py`).
 
+**The `tools` scope (preview `bot_chat_app_tools`, off by default).** A third scope
+mounts servers the app offers in `contributes.botChatServers` on the own chat of each
+ticked Bot. A Bot's chat runs on the shared `kirocrew-mate-conductor`, and its spec is
+built per session the way a Bot's worker spec is: `acp/session_mcp_crewmate.
+_crewmate_conductor_spec` (array hosts) and the KAS projection both call
+`bot_chat_app_tools.conductor_session_spec`, which adds an `<app>:<server>` entry
+read from the app agent's rendered spec only while the preview is on, the app is
+enabled, the scope is approved and the Bot is ticked. The shared conductor file is
+never written. The bot-grants PUT, enable, disable, update and uninstall each take
+`bot_chat_app_tools.snapshot` before and call `after_app_change` after: a Bot that
+lost the app's servers gets a queued no-replay discard (its next turn starts a fresh
+conversation without the old tool names), and a Bot that gained them reloads in
+place. This narrows `docs/decisions/2026-11-02-a-crewmates-worker-carries-its-template-policy.md`
+("the conductor takes nothing from the file") by a superseding entry of its own.
+
 The app's requests still pass the path gate, so it also declares `/api/members` in
 `permissions.api`. The token allowlist, CORS and frame-ancestors are unchanged.
 

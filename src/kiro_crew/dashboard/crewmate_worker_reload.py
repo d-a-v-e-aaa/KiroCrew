@@ -83,7 +83,7 @@ def _is_busy(state: Any, slot: Any, session_key: str) -> bool:
     )
 
 
-async def reload_if_idle(state: Any, slot: Any) -> str:
+async def reload_if_idle(state: Any, slot: Any, *, notice: str = _NOTICE) -> str:
     """Reload *slot*'s agent process now when it is idle; mark it pending when busy.
 
     Returns :data:`RELOADED`, :data:`BUSY` (marked, reloaded at its next turn
@@ -114,7 +114,7 @@ async def reload_if_idle(state: Any, slot: Any) -> str:
             still_ours=lambda _after: state._slots.get(key) is slot,
             denied=lambda _session_key: None,
             busy=lambda sk: _is_busy(state, slot, sk),
-            notice=_NOTICE,
+            notice=notice,
         )
     except Exception:  # noqa: BLE001 - a missed reload leaves the next spawn to read it
         logger.warning("Bot reload of %s failed", key, exc_info=True)
