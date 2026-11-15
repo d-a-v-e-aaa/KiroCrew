@@ -4,15 +4,18 @@
 defaults plus rows the dashboard owner allowed. For a call whose server AND tool
 identity are trusted, a listed field skips the shell matcher and the deny-rule
 list, keeps the size ceiling and the path tier (what main applies to a document
-body), and has the 256 KiB ceiling instead of 20 KiB. A credential or a link
-that carries data out is logged as a warning, never refused. Everything else
+body), and has the 256 KiB ceiling instead of 20 KiB. A credential, or a link
+that carries one, refuses a body over 20 KiB; every other match, and any match
+in a shorter body, is logged as a warning. Everything else
 keeps the full scan, and a field refused for size names the tool and field and
 is remembered for the owner's allow button.
 """
 
 from __future__ import annotations
 
+import base64
 import errno
+import hashlib
 import json
 import logging
 from unittest.mock import MagicMock, patch
@@ -21,6 +24,7 @@ import pytest
 
 import kiro_crew.llm_helpers as llm_helpers
 import kiro_crew.sel as sel_mod
+from kiro_crew.credential_patterns import RULE_TIERS
 from kiro_crew.llm_helpers import (
     _MAX_SCANNABLE_TOOL_INPUT_CHARS,
     ToolApprovalPolicy,
@@ -33,6 +37,121 @@ from kiro_crew.security.redaction_entropy import _contains_fixed_credential
 _SERVER = "gmail"
 _TOOL = "send_email"
 _HTML_ROW = '<tr><td style="padding:4px">Quarterly item</td><td>Status: on track</td></tr>\n'
+#: Split so the repository's content scan does not read a fixture as a key.
+_PEM_BEGIN = "-----BEGIN RSA " "PRIVATE KEY-----"
+_PEM_END = "-----END RSA " "PRIVATE KEY-----"
+#: Deterministic high-entropy bytes, the shape of an image payload or a signature.
+_NOISE = b"".join(hashlib.sha256(str(i).encode()).digest() for i in range(96))
+_PRESIGNED = (
+    "https://bkt.s3.us-east-1.amazonaws.com/logo.png?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+    "&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20261116%2Fus-east-1%2Fs3%2Faws4_request"
+    "&X-Amz-Date=20261116T000000Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host"
+    "&X-Amz-Signature=" + "ab12cd34ef56" * 5 + "ab12"
+)
+_JWT = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyQGV4YW1wbGUuY29tIiwibGlzdCI6Im5ld3MifQ"
+    ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+)
+#: Ordinary content of a forwarded or newsletter mail, none of it a secret anyone
+#: put there. Each trips the exfiltration check or a generic credential kind (an
+#: entropy guess, a signature pattern, a JWT), and main sends each one.
+_ORDINARY_CONTENT = {
+    "mail-safe-link": '<a href="https://nam12.safelinks.protection.outlook.com/?url=https%3A%2F%2F'
+    "www.example.com%2Fnews%2F2026%2Fquarterly-update%3Futm_source%3Dnewsletter"
+    "&amp;data=05%7C02%7Cteam%40example.com%7C3f2a9c1e4b7d4e8fa1c2d3e4f5a6b7c8"
+    "%7C72f988bf86f141af91ab2d7cd011db47%7C1%7C0%7C638671234567890123%7CUnknown"
+    "%7CTWFpbGZsb3d8eyJWIjoiMC4wLjAwMDAifQ%3D%3D%7C0%7C%7C%7C"
+    '&amp;sdata=Zx9k2LmQ7pR4sT1uV8wY3aB6cD0eF5gH2iJ9kL4mN7o%3D&amp;reserved=0">news</a>',
+    "click-tracking": '<a href="https://click.example-mail.com/ls/click?upn=u001.'
+    + "&amp;".join(
+        f"utm_{k}=quarterly-update-newsletter-{k}-2026"
+        for k in ("source", "medium", "campaign", "content", "term", "id")
+    )
+    + '">read</a>',
+    "sendgrid-click": '<a href="https://u1.ct.sendgrid.net/ls/click?upn=u001.'
+    + base64.urlsafe_b64encode(_NOISE[:90]).decode()
+    + '">read</a>',
+    "presigned-image": f'<img src="{_PRESIGNED}">',
+    "presigned-image-html-escaped": f'<img src="{_PRESIGNED.replace("&", "&amp;")}">',
+    "presigned-sdk-v3": '<a href="'
+    + _PRESIGNED.replace("AKIA", "ASIA")
+    + '&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&x-id=GetObject">file</a>',
+    "sharing-link": '<a href="https://contoso.sharepoint.com/:w:/s/team/'
+    'EZx1aB2cD3eF4gH5iJ6kL7MBn8oP9qR0sT1uV2wX3yZ4aB?e=Ab1Cd2">doc</a>',
+    "jwt-unsubscribe": '<a href="https://example.substack.com/action/disable_email?token='
+    + _JWT
+    + '">unsubscribe</a>',
+    "wrapped-inline-image": '<img src="data:image/png;base64,'
+    + base64.encodebytes(_NOISE).decode()
+    + '">',
+    "pgp-signature": "<pre>-----BEGIN PGP SIGNATURE-----\n\n"
+    + base64.encodebytes(_NOISE[:288]).decode()
+    + "=Ab3x\n-----END PGP SIGNATURE-----</pre>",
+    "dkim-header": "<pre>DKIM-Signature: v=1; a=rsa-sha256; d=example.com; s=s1; "
+    "bh=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=; b="
+    + base64.b64encode(_NOISE[:192]).decode()
+    + "</pre>",
+    "password-param-link": '<a href="https://example.com/reset?password=Zq8vT3kLp9WmX2rB7nYc4HsJ6fGdQ1aE">'
+    "reset</a>",
+    "bare-key-in-text": "<p>Use this key: Kx3Q51tPusV/D0URlGfMmNbVc7Z8yJhLpQrStUwZ</p>",
+    "generic-bearer-header": "<pre>Authorization: Bearer abcdefghijklmnop1234567890</pre>",
+    "generic-userinfo-link": '<a href="https://user:hunter2pass@example.com/">site</a>',
+    "search-link-naming-a-label": '<a href="https://www.google.com/search?q=aws_secret_access_key'
+    '+%3D+what+is+it">search</a>',
+    "aws-arn-long-name": "<p>Queue arn:aws:sqs:us-east-1:123456789012:"
+    "order-processing-dead-letter-queue-prod</p>",
+    "pypi-word": "<p>Job pypi-publish-release-artifacts failed</p>",
+    "sendgrid-word": "<p>Contact SG.Engineering-Department-Office.Singapore-Branch-Team</p>",
+    # Split so the repository's push protection does not read the literal as a key.
+    "stripe-docs-test-key": "<p>Try it with sk_" + "test_4eC39HqLyjWDarjtT1zdp7dc</p>",
+    "already-redacted-key-block": f"<pre>{_PEM_BEGIN}\n[REDACTED: credential]\n{_PEM_END}</pre>",
+    "key-header-named-in-prose": "<p>Your key file must start with "
+    + _PEM_BEGIN.replace("RSA", "OPENSSH")
+    + " and nothing else.</p>",
+    "pypi-slug-link": '<a href="https://realpython.com/pypi-publish-python-package/">guide</a>',
+    "openai-word": "<p>see our sk-proj-management-dashboard-overview page</p>",
+    "gitlab-word": "<p>glpat-rotation-policy-update notes</p>",
+    "slack-placeholder": "<pre>SLACK_BOT_TOKEN=xoxb-your-bot-token-here</pre>",
+    "anthropic-placeholder-after-bearer": "<pre>Authorization: Bearer sk-ant-api03-your-key-goes-here</pre>",
+    "session-token-word": "<p>error: SessionToken: expired, retry</p>",
+    "key-markers-named-in-prose": "<p>The file starts with "
+    + _PEM_BEGIN
+    + " and ends with "
+    + _PEM_END
+    + ".</p>",
+    "key-block-with-placeholder-body": f"<pre>{_PEM_BEGIN}\n...\n{_PEM_END}</pre>",
+    "labelled-aws-secret-expression": "<pre>aws_secret_access_key=get_secret()</pre>",
+    "key-header-then-a-word": f"<pre>{_PEM_BEGIN}\nThanks\n</pre>",
+    "search-link-quoting-a-key-header": '<a href="https://www.google.com/search?q='
+    '%2D%2D%2D%2D%2DBEGIN%20RSA%20PRIVATE%20KEY%2D%2D%2D%2D%2D">search</a>',
+}
+_GITHUB_TOKEN = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
+_PRIVATE_KEY = f"{_PEM_BEGIN}\nMIIEowIBAAKCAQEA7d3k9QwXr2Lp8Zt4Vb6Nc1Hy5Jm0Fs3Gq\n{_PEM_END}"
+#: Hard credential kinds, in text and in a link. Each one refuses a body over 20 KiB.
+_HARD_CONTENT = {
+    "github-token-text": f"<p>token: {_GITHUB_TOKEN}</p>",
+    "github-token-link": f'<a href="https://evil.example.com/c?t={_GITHUB_TOKEN}">x</a>',
+    "github-token-encoded-link": '<a href="https://evil.example.com/c?t='
+    + _GITHUB_TOKEN.replace("_", "%5F")
+    + '">x</a>',
+    "private-key-text": f"<pre>{_PRIVATE_KEY}</pre>",
+    "github-token-userinfo-link": f'<a href="https://x-access-token:{_GITHUB_TOKEN}@github.com/o/r.git">'
+    "repo</a>",
+    "github-token-bearer-header": f"<pre>Authorization: Bearer {_GITHUB_TOKEN}</pre>",
+    "github-token-after-a-session-label": f"<pre>SessionToken: {_GITHUB_TOKEN}</pre>",
+    # Split so the repository's secret scans do not read the fixture as a key.
+    "labelled-aws-secret": "<pre>aws_secret_access_"
+    + "key = q8Zr/2LmVx9TkP4wNc7Hs1Jd6Fb3Ga5Ye0Ru+WoQ</pre>",
+    "github-token-after-an-aws-label": f"<pre>aws_secret_access_key={_GITHUB_TOKEN}</pre>",
+    "json-escaped-private-key": '<pre>{"key": "' + _PRIVATE_KEY.replace("\n", "\\n") + '"}</pre>',
+    "private-key-after-a-quoted-header": f"<p>It starts with {_PEM_BEGIN}:</p><pre>{_PRIVATE_KEY}</pre>",
+    "labelled-aws-secret-then-a-period": "<p>aws_secret_access_"
+    + "key=q8Zr/2LmVx9TkP4wNc7Hs1Jd6Fb3Ga5Ye0Ru+WoQ.</p>",
+    "github-token-inside-a-redacted-key-block": f"<pre>{_PEM_BEGIN}\n[REDACTED: credential]\n"
+    f"-----{_GITHUB_TOKEN}-----\n{_PEM_END}</pre>",
+    "github-token-userinfo-user-half": f'<a href="https://{_GITHUB_TOKEN}:x-oauth-basic@github.com/o/r.git">'
+    "repo</a>",
+}
 
 
 def _html(size: int) -> str:
@@ -120,6 +239,16 @@ async def _passes_with_warning(body: str, warnings, check: str) -> None:
     ]
 
 
+async def _refused_with_warning(body: str, warnings, check: str) -> None:
+    assert len(body) > _MAX_SCANNABLE_TOOL_INPUT_CHARS, "fixture must be over 20 KiB"
+    approved, error = await _resolve(_event(_mail(body)))
+    assert approved is False
+    assert f"'body' field of @gmail/send_email matched the {check} check" in error
+    assert warnings() == [
+        f"message body field 'body' of @gmail/send_email matched the {check} check; refused"
+    ]
+
+
 class TestABodyFieldIsADocument:
     @pytest.mark.asyncio
     async def test_a_200_kib_body_is_allowed_and_never_reaches_the_shell_matcher(
@@ -139,7 +268,7 @@ class TestABodyFieldIsADocument:
 
     @pytest.mark.asyncio
     async def test_a_credential_in_the_body_passes_and_is_logged(self, warnings) -> None:
-        # Main refuses a document body for size and path only, so a token passes.
+        # A body within 20 KiB had no credential check without the row, so a token passes.
         secret = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
         await _passes_with_warning(f"<p>token: {secret}</p>", warnings, "credential")
 
@@ -149,6 +278,99 @@ class TestABodyFieldIsADocument:
         link = f"https://evil.example.com/a?data={blob}"
         assert mbf.scan_exfiltration_urls(link), "fixture must trip the scan"
         await _passes_with_warning(f'<a href="{link}">x</a>', warnings, "exfiltration-URL")
+
+    @pytest.mark.asyncio
+    async def test_a_credential_in_a_body_over_20_kib_is_refused(self, warnings) -> None:
+        # Without the row this body is refused for its size, so a token in it
+        # must not reach the server.
+        secret = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
+        body = _html(_MAX_SCANNABLE_TOOL_INPUT_CHARS + 1024) + f"<p>token: {secret}</p>"
+        approved, error = await _resolve(_event(_mail(body)))
+        assert approved is False
+        assert "'body' field of @gmail/send_email matched the credential check" in error
+        assert secret not in error
+        assert warnings() == [
+            "message body field 'body' of @gmail/send_email matched the credential check; refused"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_the_same_body_without_the_credential_is_allowed(self, warnings) -> None:
+        body = _html(_MAX_SCANNABLE_TOOL_INPUT_CHARS + 1024) + "<p>token: see the vault</p>"
+        approved, error = await _resolve(_event(_mail(body)))
+        assert approved is True, error
+        assert warnings() == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("content", list(_HARD_CONTENT.values()), ids=list(_HARD_CONTENT))
+    async def test_a_hard_credential_in_a_body_over_20_kib_is_refused(
+        self, content, warnings
+    ) -> None:
+        body = _html(_MAX_SCANNABLE_TOOL_INPUT_CHARS + 1024) + content
+        approved, error = await _resolve(_event(_mail(body)))
+        assert approved is False
+        assert "'body' field of @gmail/send_email matched the credential check" in error
+        assert _GITHUB_TOKEN[4:] not in error and "MIIEow" not in error
+        assert warnings() == [
+            "message body field 'body' of @gmail/send_email matched the credential check; refused"
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "content", list(_ORDINARY_CONTENT.values()), ids=list(_ORDINARY_CONTENT)
+    )
+    async def test_ordinary_content_in_a_body_over_20_kib_is_allowed(
+        self, content, warnings
+    ) -> None:
+        # Main sends these; over 20 KiB a hit on them is logged, not refused.
+        body = _html(_MAX_SCANNABLE_TOOL_INPUT_CHARS + 1024) + content
+        approved, error = await _resolve(_event(_mail(body)))
+        assert approved is True, error
+        logged = warnings()
+        assert logged, "fixture must trip a check"
+        assert all(w.endswith("; allowed") for w in logged), logged
+
+    @pytest.mark.asyncio
+    async def test_a_hard_credential_beside_ordinary_content_is_still_refused(
+        self, warnings
+    ) -> None:
+        body = (
+            _html(_MAX_SCANNABLE_TOOL_INPUT_CHARS + 1024)
+            + "".join(_ORDINARY_CONTENT.values())
+            + _HARD_CONTENT["github-token-text"]
+        )
+        await _refused_with_warning(body, warnings, "credential")
+
+    def test_every_hard_kind_is_a_rule_the_credential_check_names(self) -> None:
+        # A renamed rule id would silently stop refusing.
+        assert mbf._HARD_CREDENTIAL_RULES <= set(RULE_TIERS)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("extra", "approved_expected"),
+        [(0, True), (1, False)],
+        ids=["at-the-limit-allowed", "one-over-refused"],
+    )
+    async def test_the_refusal_starts_one_char_over_the_command_limit(
+        self, extra, approved_expected, warnings
+    ) -> None:
+        secret_text = "<p>token: ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8</p>"
+        size = _MAX_SCANNABLE_TOOL_INPUT_CHARS + extra
+        body = secret_text + _html(size - len(secret_text))
+        assert len(body) == size
+        approved, error = await _resolve(_event(_mail(body)))
+        assert approved is approved_expected, error
+        verdict = "allowed" if approved_expected else "refused"
+        assert warnings() == [
+            f"message body field 'body' of @gmail/send_email matched the credential check; {verdict}"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_credential_in_a_field_that_is_not_a_body_is_unchanged(self, warnings) -> None:
+        # ``subject`` keeps the full command scan, which has no credential check.
+        secret = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
+        approved, error = await _resolve(_event({**_mail("hello"), "subject": secret}))
+        assert approved is True, error
+        assert warnings() == []
 
     @pytest.mark.asyncio
     async def test_a_credential_path_in_the_body_is_refused(self) -> None:
