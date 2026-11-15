@@ -68,7 +68,7 @@ import { actionGrant } from '../composerActions/composerActionRegistry'
 import { memoryAccessLabel, memoryRequested } from '../components/appstore/memoryAccessLabel'
 import { managerLabel, originLabel } from './appDetailPageLabels'
 import { ChatSlotsBox, DesktopCapabilitiesBox, DesktopCapabilitiesStaged, HiddenSessionsBox, UserSessionReachBox, UserSessionReachStaged, WebhookSourceBox, WorkerAutoApproveBox, WorkerAutoApproveStaged, knownDesktopCapabilities, reachVerbs } from './AppDetailGrantBoxes'
-import { trustGrants } from '../components/appstore/trustGrants'
+import { apiGrantLabel, disclosedApi, trustGrants } from '../components/appstore/trustGrants'
 import { stagedGrantsOf } from './appDetailPageStagedGrants'
 // The page's parts live in sibling owners that never import this module:
 // `AppDetailPageArt.tsx` (the hero banner and the screenshot gallery, each with
@@ -77,6 +77,7 @@ import { stagedGrantsOf } from './appDetailPageStagedGrants'
 // `appDetailPageStagedGrants.ts` (what the approved set holds back).
 // Callers import the two art components from this module.
 export { HeroBanner, ScreenshotGallery }
+
 
 export default function AppDetailPage() {
   const { name } = useParams<{ name: string }>()
@@ -1135,7 +1136,7 @@ export default function AppDetailPage() {
                   <div className="text-[13px]">{i18nT('pages.appDetailPage.grants_reconsent_api')}</div>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {stagedApi.map(p => (
-                      <code key={p} className="bg-bg-elevated border border-border px-1.5 py-0.5 rounded text-[11px] text-text">{p}</code>
+                      <span key={p} className="bg-bg-elevated border border-border px-1.5 py-0.5 rounded text-[11px] text-text">{apiGrantLabel(p)}</span>
                     ))}
                   </div>
                 </div>
@@ -1240,7 +1241,7 @@ export default function AppDetailPage() {
               primary
               onClick={async () => {
                 startAction('approve_grants')
-                const approved = fmtList([...stagedApi, ...stagedEvents, ...stagedBots, ...stagedLinkHosts, ...stagedLinkPatterns, ...(stagedFullUrl ? ['fullUrl'] : []), ...stagedMessageActions.map(e => messageActionGrantLabel(e, declaredMessageActions)), ...stagedOpenHosts, ...(stagedOpenFullUrl ? ['fullUrl'] : []), ...stagedComposerActions, ...stagedSelection.map(e => selectionActionGrantLabel(e, declaredSelectionActions)), ...(stagedWorkerAutoApprove ? ['workerAutoApprove'] : []), ...stagedUserSessionReach, ...stagedDesktopCapabilities, ...stagedFrameSources], { style: 'narrow' })
+                const approved = fmtList([...stagedApi.map(apiGrantLabel), ...stagedEvents, ...stagedBots, ...stagedLinkHosts, ...stagedLinkPatterns, ...(stagedFullUrl ? ['fullUrl'] : []), ...stagedMessageActions.map(e => messageActionGrantLabel(e, declaredMessageActions)), ...stagedOpenHosts, ...(stagedOpenFullUrl ? ['fullUrl'] : []), ...stagedComposerActions, ...stagedSelection.map(e => selectionActionGrantLabel(e, declaredSelectionActions)), ...(stagedWorkerAutoApprove ? ['workerAutoApprove'] : []), ...stagedUserSessionReach, ...stagedDesktopCapabilities, ...stagedFrameSources], { style: 'narrow' })
                 try {
                   const result = await api.enableApp(app.name, false, {
                     api: stagedApi,
@@ -1743,15 +1744,15 @@ export default function AppDetailPage() {
             <Card>
               <CardTitle>{i18nT('pages.appDetailPage.permissions')}</CardTitle>
               <div className="grid gap-2 mt-2 text-[13px]">
-                {(app.manifest.permissions.api || []).length > 0 && (
+                {(disclosedApi(app.manifest.permissions) || []).length > 0 && (
                   <div>
                     <div className="text-muted text-[11px] uppercase tracking-wider mb-1">{i18nT('pages.appDetailPage.api_access')}</div>
                     <div className="flex flex-wrap gap-1">
-                      {(app.manifest.permissions.api || []).map((p: string) => (
-                        <code key={p} className="bg-bg-elevated border border-border px-1.5 py-0.5 rounded text-[11px] text-text">
-                          {p}
+                      {(disclosedApi(app.manifest.permissions) || []).map((p: string) => (
+                        <span key={p} className="bg-bg-elevated border border-border px-1.5 py-0.5 rounded text-[11px] text-text">
+                          {apiGrantLabel(p)}
                           {stagedApi.includes(p) && <span className="ml-1 text-warn">· {i18nT('pages.appDetailPage.grant_not_approved')}</span>}
-                        </code>
+                        </span>
                       ))}
                     </div>
                   </div>

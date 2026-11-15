@@ -127,6 +127,10 @@ const ALL_TARGETS: readonly RefreshTarget[] = [
   // value to mint a new key. This also covers external/CLI config writes.
   { queryKey: ['resolved-model'] },
   { queryKey: ['agent-resolved-model'] },
+  // Which memory Crew uses, and the move list under it (`memory_provider` frame):
+  // a switch made in another window must reach the picker, whose cached overview
+  // is also the switch sheet's copy source.
+  { queryKey: ['memory-provider'] },
   ...ARTIFACT_TARGETS,
 ]
 

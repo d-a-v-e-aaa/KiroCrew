@@ -269,6 +269,24 @@ def test_a_crashed_run_resumes_at_the_next_unit(tmp_path) -> None:
     assert sorted(ingests) == [f"u{n}:ingest" for n in range(4)]
 
 
+def test_many_plans_never_evict_a_real_run(tmp_path, monkeypatch) -> None:
+    # An app may make plans; a paused run's ledger is what cleanup and resume read.
+    monkeypatch.setattr(provider_run, "_dir", lambda: tmp_path)
+    paused = _run(["baseline:recency"])
+    paused.state, paused.created_at = "paused", 1.0
+    provider_run.save(paused)
+    provider_run._append(paused.id, ".ledger.jsonl", [{"op": "created"}])
+    for index in range(provider_run.RUNS_KEPT + 5):
+        plan = _run(["baseline:recency"])
+        plan.created_at = 2.0 + index
+        provider_run.save(plan)
+        provider_run.prune()
+    assert (tmp_path / f"{paused.id}.json").exists()
+    assert provider_run.read_ledger(paused.id) == [{"op": "created"}]
+    plans = [r for r in provider_run.list_runs() if r.state == "planned"]
+    assert len(plans) == provider_run.RUNS_KEPT
+
+
 def test_the_llm_budget_stops_the_run_with_a_partial_report(tmp_path) -> None:
     calls: list[str] = []
 

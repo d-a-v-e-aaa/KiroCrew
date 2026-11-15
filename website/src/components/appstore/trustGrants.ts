@@ -1,8 +1,24 @@
 import type { TrustAppTarget } from './TrustAppModal'
+import { i18nT } from '../../i18n/t'
+
+/** The API prefix granted by the manifest's literal `memoryAdmin: true`. */
+export const MEMORY_ADMIN_API_PREFIX = '/api/memory/provider'
+
+/** Use the same description at install, re-approval and on the permissions card. */
+export function apiGrantLabel(path: string): string {
+  return path === MEMORY_ADMIN_API_PREFIX ? i18nT('pages.overview.memoryProvider.admin_grant') : path
+}
+
+export function disclosedApi(permissions: DisclosedPermissions | undefined): string[] | undefined {
+  return permissions?.memoryAdmin === true
+    ? [...new Set([...(permissions.api ?? []), MEMORY_ADMIN_API_PREFIX])]
+    : permissions?.api
+}
 
 /** The manifest `permissions` fields the trust prompt discloses. */
 export interface DisclosedPermissions {
   api?: string[]
+  memoryAdmin?: boolean
   sessionApproval?: boolean
   memberThreads?: boolean
   workerAutoApprove?: boolean
@@ -33,7 +49,7 @@ export function trustGrants(permissions: DisclosedPermissions | undefined): Trus
     hiddenSessions: permissions?.hiddenSessions === true,
     reachableByUserSessions: permissions?.reachableByUserSessions,
     desktopCapabilities: permissions?.desktopCapabilities,
-    api: permissions?.api,
+    api: disclosedApi(permissions),
     webhookSource: permissions?.webhookSource === true,
   }
 }
