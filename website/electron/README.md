@@ -132,8 +132,9 @@ file, open an image) and `app-window-gateways.js` (which crew an app's windows s
 `mochi/shortcuts.js`) records the chords it is configured for in
 `shell-shortcut-reservations.js`, and the host never gives an app one of them. It names no app and runs no app code, and a new app never
 gets a directory of its own here. `mochi/` and `crew-companion/` predate it and
-shrink as each moves onto it; `test/app-window-host-independence.test.js` holds
-both rules. Contract: `docs/system-specs/modules/app-kit-platform.md` §35.
+shrink as each moves onto it, and each stands down whenever its app's record is
+one the host serves (`hostOwnsAppWindows`); `test/app-window-host-independence.test.js`
+holds all three rules. Contract: `docs/system-specs/modules/app-kit-platform.md` §35.
 
 ## Install as macOS App
 
