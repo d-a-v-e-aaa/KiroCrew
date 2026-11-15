@@ -48,6 +48,12 @@ _APP_FRAMES = [
     ),
     pytest.param("notification", {"source": "app:mochi", "body": "private"}, id="notification"),
     pytest.param("notification_channel_settings", {"channel": "mochi.reminders"}, id="channel"),
+    # Not an app's, but it names the Team Crews the owner's own sign-in can open.
+    pytest.param(
+        "notification",
+        {"source": "system", "channel": "system.relay", "title": "You've been added to Build box"},
+        id="owner-only-relay-note",
+    ),
 ]
 #: The Crew's own frames, which a teammate keeps.
 _CREW_FRAMES = [
@@ -239,6 +245,36 @@ async def test_the_notification_list_withholds_app_pushes_from_a_teammate(tmp_pa
         assert sources == ["system", "system"]
         assert body["unread"] == 1
         assert withheld == ["notification"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("who", ["owner", "teammate"])
+async def test_the_notification_list_withholds_the_owners_team_crew_notes(tmp_path, who):
+    state = _make_state(tmp_path)
+    state._notification_log = [
+        {"ts": "1", "source": "system", "channel": "system.agent", "body": "done", "acked": False},
+        {
+            "ts": "2",
+            "source": "system",
+            "channel": "system.relay",
+            "body": "Build box",
+            "acked": False,
+        },
+    ]
+    ingress = _personal() if who == "owner" else _team()
+    user = OWNER if who == "owner" else TEAMMATE
+    async with TestClient(TestServer(_relay_app(state, ingress))) as client:
+        resp = await client.get(
+            "/api/notifications", headers=ingress.stamp_headers([], relay_user=user)
+        )
+        assert resp.status == 200, await resp.text()
+        body = await resp.json()
+    channels = [note["channel"] for note in body["notifications"]]
+    if who == "owner":
+        assert channels == ["system.agent", "system.relay"]
+    else:
+        assert channels == ["system.agent"]
+        assert body["unread"] == 1
 
 
 class _Channels:

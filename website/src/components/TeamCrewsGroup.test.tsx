@@ -472,3 +472,181 @@ describe('TeamCrewsGroup', () => {
     expect(relayRefusalText('crew_offline')).toBe('This Crew is offline.')
   })
 })
+
+describe('TeamCrewsGroup: a Team Crew the person has not seen yet', () => {
+  const NEW_ID = 'n'.repeat(24)
+  const fresh = () => crew({ endpointId: NEW_ID, name: 'Docs box', crewType: 'TEAM', unseen: true })
+
+  function mountAt(route: string) {
+    vi.spyOn(api, 'listInstances').mockResolvedValue(listResp([]))
+    const store = createTestStore({ instances: { warm: {}, activeId: null, mru: [], unread: {} } })
+    return renderWithProviders(<TeamCrewsSwitcher variant="inline" />, { store, route })
+  }
+
+  it('dots the caret and the row, tells the gateway once the menu shows it, and drops the dot on close', async () => {
+    withBridge()
+    vi.spyOn(api, 'relayViewerCrews').mockResolvedValue({ crews: [fresh()] })
+    const seen = vi.spyOn(api, 'relayViewerCrewsSeen').mockResolvedValue({ ok: true })
+    mountAt('/')
+    const caret = await screen.findByRole('button', { name: 'Switch crew, new Team Crew' })
+    expect(screen.getByTestId('crew-switcher-new-dot')).toBeTruthy()
+    const u = userEvent.setup()
+    await u.click(caret)
+    const group = await screen.findByTestId('team-crews-group')
+    expect(within(group).getByTestId('relay-crew-new').textContent).toBe('New')
+    await waitFor(() => expect(seen).toHaveBeenCalledWith([NEW_ID]))
+    await u.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('crew-switcher-new-dot')).toBeNull())
+    expect(seen).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens the Crew a note's Open action names, then clears its dot", async () => {
+    const open = withBridge()
+    vi.spyOn(api, 'relayViewerCrews').mockResolvedValue({ crews: [fresh()] })
+    const seen = vi.spyOn(api, 'relayViewerCrewsSeen').mockResolvedValue({ ok: true })
+    mountAt(`/chat?relay_crew=${NEW_ID}`)
+    await waitFor(() => expect(open).toHaveBeenCalledWith(NEW_ID))
+    expect(open).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(seen).toHaveBeenCalledWith([NEW_ID]))
+    await waitFor(() => expect(screen.queryByTestId('crew-switcher-new-dot')).toBeNull())
+  })
+
+  it('keeps the Open through a failed list read and opens the Crew once a read succeeds', async () => {
+    const open = withBridge()
+    const read = vi.spyOn(api, 'relayViewerCrews')
+      .mockRejectedValueOnce(new ApiError(502, 'down', JSON.stringify({ error: 'down', code: 'UNREACHABLE' })))
+      .mockResolvedValue({ crews: [fresh()] })
+    vi.spyOn(api, 'relayViewerCrewsSeen').mockResolvedValue({ ok: true })
+    const { queryClient } = mountAt(`/chat?relay_crew=${NEW_ID}`)
+    await waitFor(() => expect(queryClient.getQueryState(RELAY_VIEWER_CREWS_KEY)?.status).toBe('error'))
+    expect(screen.queryByTestId('relay-crew-open-refusal')).toBeNull()
+    expect(open).not.toHaveBeenCalled()
+    await act(async () => { await queryClient.refetchQueries({ queryKey: RELAY_VIEWER_CREWS_KEY }) })
+    await waitFor(() => expect(open).toHaveBeenCalledWith(NEW_ID))
+    expect(read).toHaveBeenCalledTimes(2)
+    expect(screen.queryByTestId('relay-crew-open-refusal')).toBeNull()
+  })
+
+  it("re-reads a stale list before calling a note's Crew gone, and opens it when the fresh read has it", async () => {
+    const open = withBridge()
+    const read = vi.spyOn(api, 'relayViewerCrews')
+      .mockResolvedValueOnce({ crews: [] })
+      .mockResolvedValue({ crews: [fresh()] })
+    vi.spyOn(api, 'relayViewerCrewsSeen').mockResolvedValue({ ok: true })
+    mountAt(`/chat?relay_crew=${NEW_ID}`)
+    await waitFor(() => expect(open).toHaveBeenCalledWith(NEW_ID))
+    expect(read).toHaveBeenCalledTimes(2)
+    expect(screen.queryByTestId('relay-crew-open-refusal')).toBeNull()
+  })
+
+  it('does not let a list read that started before a seen save bring the dot back', async () => {
+    withBridge()
+    let release: (v: { crews: RelayCrewEntry[] }) => void = () => {}
+    const read = vi.spyOn(api, 'relayViewerCrews').mockResolvedValueOnce({ crews: [fresh()] })
+    vi.spyOn(api, 'relayViewerCrewsSeen').mockResolvedValue({ ok: true })
+    const { queryClient } = mountAt('/')
+    const u = userEvent.setup()
+    await u.click(await screen.findByRole('button', { name: 'Switch crew, new Team Crew' }))
+    await screen.findByTestId('team-crews-group')
+    // A poll goes out while the menu is open, answering with the pre-save list.
+    read.mockReturnValueOnce(new Promise(r => { release = r }))
+    void queryClient.refetchQueries({ queryKey: RELAY_VIEWER_CREWS_KEY })
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    await u.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('crew-switcher-new-dot')).toBeNull())
+    await act(async () => { release({ crews: [fresh()] }) })
+    // The late answer has been taken in or dropped once the read is no longer running.
+    await waitFor(() => expect(queryClient.getQueryState(RELAY_VIEWER_CREWS_KEY)?.fetchStatus).toBe('idle'))
+    expect(screen.queryByTestId('crew-switcher-new-dot')).toBeNull()
+  })
+
+  it("decides a note's Open only from its fresh read, not from a cache change while that read is out", async () => {
+    const open = withBridge()
+    let answer: (v: { crews: RelayCrewEntry[] }) => void = () => {}
+    const other = crew({ endpointId: 'o'.repeat(24), name: 'Other box', crewType: 'TEAM', unseen: true })
+    const read = vi.spyOn(api, 'relayViewerCrews')
+      .mockResolvedValueOnce({ crews: [other] })
+      .mockReturnValueOnce(new Promise(r => { answer = r }))
+      .mockResolvedValueOnce({ crews: [{ ...other, unseen: false }] })
+      .mockResolvedValue({ crews: [fresh(), other] })
+    vi.spyOn(api, 'relayViewerCrewsSeen').mockResolvedValue({ ok: true })
+    const { queryClient } = mountAt(`/chat?relay_crew=${NEW_ID}`)
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    // The cache changes while the fresh read is out (a poll, or a seen save for
+    // another Crew); the old list must not decide the Open.
+    await act(async () => { await queryClient.refetchQueries({ queryKey: RELAY_VIEWER_CREWS_KEY }) })
+    expect(read).toHaveBeenCalledTimes(3)
+    // That changed list has rendered (its one Crew is seen now, so the dot is gone).
+    await waitFor(() => expect(screen.queryByTestId('crew-switcher-new-dot')).toBeNull())
+    expect(screen.queryByTestId('relay-crew-open-refusal')).toBeNull()
+    expect(open).not.toHaveBeenCalled()
+    await act(async () => { answer({ crews: [fresh()] }) })
+    await waitFor(() => expect(open).toHaveBeenCalledWith(NEW_ID))
+    expect(screen.queryByTestId('relay-crew-open-refusal')).toBeNull()
+  })
+
+  it('opens nothing for a Crew that is not on the list, and says it is gone', async () => {
+    const open = withBridge()
+    vi.spyOn(api, 'relayViewerCrews').mockResolvedValue({ crews: [fresh()] })
+    mountAt(`/chat?relay_crew=${'z'.repeat(24)}`)
+    expect((await screen.findByTestId('relay-crew-open-refusal')).textContent)
+      .toContain("The Team Crew this notification named isn't in your list any more.")
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('keeps the dot when the gateway could not save that the Crew was seen', async () => {
+    withBridge()
+    vi.spyOn(api, 'relayViewerCrews').mockResolvedValue({ crews: [fresh()] })
+    const seen = vi.spyOn(api, 'relayViewerCrewsSeen').mockRejectedValue(new ApiError(503, 'not saved', '{}'))
+    mountAt('/')
+    const u = userEvent.setup()
+    await u.click(await screen.findByRole('button', { name: 'Switch crew, new Team Crew' }))
+    await screen.findByTestId('team-crews-group')
+    await waitFor(() => expect(seen).toHaveBeenCalled())
+    expect((await screen.findByTestId('relay-crews-seen-failed')).textContent)
+      .toContain("Couldn't save that you've seen this.")
+    await u.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('team-crews-group')).toBeNull())
+    expect(screen.getByTestId('crew-switcher-new-dot')).toBeTruthy()
+  })
+
+  it('clears the dot when the seen reply lands after the menu closed', async () => {
+    withBridge()
+    vi.spyOn(api, 'relayViewerCrews').mockResolvedValue({ crews: [fresh()] })
+    let reply: (v: { ok: boolean }) => void = () => {}
+    vi.spyOn(api, 'relayViewerCrewsSeen').mockReturnValue(new Promise(r => { reply = r }))
+    mountAt('/')
+    const u = userEvent.setup()
+    await u.click(await screen.findByRole('button', { name: 'Switch crew, new Team Crew' }))
+    await screen.findByTestId('team-crews-group')
+    await u.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('team-crews-group')).toBeNull())
+    expect(screen.getByTestId('crew-switcher-new-dot')).toBeTruthy()
+    await act(async () => { reply({ ok: true }) })
+    await waitFor(() => expect(screen.queryByTestId('crew-switcher-new-dot')).toBeNull())
+  })
+
+  it('sends a long unseen list in batches the route accepts', async () => {
+    withBridge()
+    const many = Array.from({ length: 450 }, (_, i) =>
+      crew({ endpointId: `m${String(i).padStart(23, '0')}`, name: `Crew ${i}`, crewType: 'TEAM', unseen: true }))
+    vi.spyOn(api, 'relayViewerCrews').mockResolvedValue({ crews: many })
+    const seen = vi.spyOn(api, 'relayViewerCrewsSeen').mockResolvedValue({ ok: true })
+    mountAt('/')
+    const u = userEvent.setup()
+    await u.click(await screen.findByRole('button', { name: 'Switch crew, new Team Crew' }))
+    await screen.findByTestId('team-crews-group')
+    await waitFor(() => expect(seen).toHaveBeenCalledTimes(3))
+    expect(seen.mock.calls.map(c => c[0].length)).toEqual([200, 200, 50])
+  })
+
+  it('says why beside the switcher when that open fails, and keeps the dot', async () => {
+    withBridge(vi.fn(async () => ({ ok: false, error: 'CREW_OFFLINE' })))
+    vi.spyOn(api, 'relayViewerCrews').mockResolvedValue({ crews: [fresh()] })
+    const seen = vi.spyOn(api, 'relayViewerCrewsSeen').mockResolvedValue({ ok: true })
+    mountAt(`/chat?relay_crew=${NEW_ID}`)
+    expect((await screen.findByTestId('relay-crew-open-refusal')).textContent).toContain("Couldn't open Docs box. This Crew is offline.")
+    expect(screen.getByTestId('crew-switcher-new-dot')).toBeTruthy()
+    expect(seen).not.toHaveBeenCalled()
+  })
+})

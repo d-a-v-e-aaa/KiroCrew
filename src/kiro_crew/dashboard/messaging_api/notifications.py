@@ -22,7 +22,6 @@ if TYPE_CHECKING:
         is_app_channel,
         is_relay_teammate,
         logger,
-        notification_source_app,
         recorded_cron_item,
         refuse_relayed,
         unread_count,
@@ -68,8 +67,11 @@ async def api_notification_delete(request: web.Request) -> web.Response:
 
 
 def _is_app_note(note: dict) -> bool:
-    """Whether *note* is an app's push notification, which a relayed teammate never sees."""
-    return bool(notification_source_app(str(note.get("source", ""))))
+    """Whether a relayed teammate never sees *note*: an app's push, or a note on an
+    owner-only channel (``ws_event_scope.OWNER_ONLY_CHANNELS``)."""
+    from kiro_crew.dashboard.ws_event_scope import teammate_withheld_note
+
+    return teammate_withheld_note(note)
 
 
 def _refuse_hidden_note(

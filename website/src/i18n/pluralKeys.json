@@ -565,5 +565,6 @@
   "pages.overview.skillsTab.also_dismiss_older_updates",
   "components.grillCard.minutes",
   "components.notifications.systemNote.moved_to_history_startup_body",
-  "components.notifications.systemNote.moved_to_history_idle_body"
+  "components.notifications.systemNote.moved_to_history_idle_body",
+  "components.notifications.systemNote.relay_crews_available_title"
 ]
