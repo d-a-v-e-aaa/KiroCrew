@@ -133,8 +133,10 @@ def _seam_level_uses(tree: Path) -> dict[str, int]:
     ``agentReadOnlyDirs``, an exact ``permissions.api`` entry,
     ``permissions.chatSlots``, ``permissions.desktopCapabilities`` and
     ``permissions.webhookSource`` at level 7, a directory entry in
-    ``credentialMasks`` at level 8), the context seams any non-test ``.py`` file
-    reaches, and the backend SDK package (level 7) any of them names. A miss lets
+    ``credentialMasks`` at level 8, and any ``credentialMasks`` again at level 9, where
+    the agent tool gate fences an installed app's masks as it fences the built-ins'),
+    the context seams any non-test ``.py`` file reaches, and the backend SDK package
+    (level 7) any of them names. A miss lets
     a pin adopt on a host without the seam, so the scan errs wide: a false hit
     only asks for a higher ``--min-sdk-level``.
     """
@@ -165,6 +167,10 @@ def _seam_level_uses(tree: Path) -> dict[str, int]:
         uses["app.json permissions.webhookSource"] = 7
     if isinstance(masks, list) and any(isinstance(m, str) and m.endswith("/") for m in masks):
         uses["app.json credentialMasks directory"] = 8
+    if masks:
+        # A former built-in's masks were on the tool gate's static rows; below level 9
+        # the adopted copy's would be fenced by the OS sandbox only.
+        uses["app.json credentialMasks tool gate"] = 9
     for dirpath, dirnames, filenames in os.walk(tree):
         dirnames[:] = sorted(d for d in dirnames if d not in _UNSCANNED_DIRS)
         for filename in sorted(filenames):
