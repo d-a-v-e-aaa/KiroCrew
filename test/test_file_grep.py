@@ -909,7 +909,8 @@ class TestPreviewRedaction:
         """A secret straddling the preview cap would be CUT IN HALF first, and
         half a token matches no pattern -- so the cut has to come second."""
         monkeypatch.setattr(f, "_GREP_PREVIEW_CHARS", 40)
-        line = "x" * 30 + SAMPLE_SLACK_BOT_TOKEN + " tail"
+        # A blank before it: a token glued to a letter is no token.
+        line = "x" * 29 + " " + SAMPLE_SLACK_BOT_TOKEN + " tail"
         hit = f._grep_hit("/r/a.py", 1, line)
         assert "xoxb" not in hit["preview"]
         assert len(hit["preview"]) <= 40

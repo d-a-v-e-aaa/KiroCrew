@@ -107,8 +107,8 @@ _MD_BLOCK_LEAD_RE = re.compile(r"^([ \t]*)(?:([-+#=])|(\d{1,9})([.)]))", re.MULT
 # genuinely ends a URL: the renderer's own autolinker stops there too, so text
 # after it is prose rather than part of a fetchable address. Encoding it would
 # treat the two as one URL and destroy benign content -- `see <url>?id=7
-# <40-char sha> for detail` would collapse to `see%20[REDACTED: suspicious URL
-# ...]`, losing every word after the URL.
+# <40-char sha> for detail` would read as one address, with every word after the
+# URL inside it.
 #
 # This table is a SHADOW of that scanner's terminator set and exists only while
 # the scanner truncates. Retire it once the scanner's own set is fixed rather

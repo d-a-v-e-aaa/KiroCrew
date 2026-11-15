@@ -20,7 +20,7 @@ from kiro_crew.artifacts import ArtifactStore
 from kiro_crew.dashboard.handlers import webapp_preview as wp
 from kiro_crew.deploy import handlers as deploy_handlers
 from kiro_crew.deploy.webapp_types import webapp_metadata_from_dict
-from kiro_crew.testing.synthetic_credentials import SAMPLE_AWS_SECRET
+from kiro_crew.testing.synthetic_credentials import SAMPLE_AWS_SECRET, github_classic
 
 
 @pytest.fixture
@@ -488,7 +488,9 @@ class TestRound6Fixes:
         store, app_dir = env
         pub = app_dir / "public"
         (pub / "config").write_text("SecretAccessKey=" + SAMPLE_AWS_SECRET)
-        (pub / "blob.bin").write_bytes(f"prefix {SAMPLE_AWS_SECRET} suffix".encode())
+        (pub / "blob.bin").write_bytes(
+            f"prefix {github_classic(seed=123)} suffix".encode()
+        )
         token = _mint(store, app_dir, slug="octet-app")
         for path in ("config", "blob.bin"):
             with pytest.raises(web.HTTPNotFound):

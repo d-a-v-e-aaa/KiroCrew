@@ -65,7 +65,7 @@ from kiro_crew.messaging.outbound_files import (
     extract_local_refs_off_loop,
 )
 from kiro_crew.platform_compat import restrict_dir_to_owner
-from kiro_crew.security import redact_credentials, redact_exfiltration_urls
+from kiro_crew.security import redact_credentials, redact_exfiltration_urls, refuses
 from kiro_crew.sel import sel
 
 if TYPE_CHECKING:
@@ -339,7 +339,7 @@ def upload_filename(file: OutboundFile, index: int) -> str:
     stem = _UNSAFE_FILENAME_RE.sub("_", os.path.basename(file.path))
     stem = os.path.splitext(stem)[0].strip("._")[:_STEM_CHARS]
     name = f"{stem or f'image_{index}'}{ext}"
-    return name if _redact(name) == name else f"image_{index}{ext}"
+    return f"image_{index}{ext}" if refuses(name, _redact) else name
 
 
 def upload_title(file: OutboundFile, filename: str) -> str:

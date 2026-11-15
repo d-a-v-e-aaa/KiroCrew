@@ -54,6 +54,7 @@ from html import unescape
 from html.parser import HTMLParser
 from typing import Any, Awaitable, Callable, Iterable
 
+from kiro_crew.security import refuses
 from kiro_crew.slack.code_channels import surface
 from kiro_crew.slack.code_channels.binding import code_channels_on, live_config
 from kiro_crew.slack.code_channels.models import (
@@ -679,7 +680,7 @@ async def _set_view(call: Call, args: dict[str, Any]) -> str:
     view_key = _text(args, "view_key", required=True)
     if not _VIEW_KEY_RE.match(view_key):
         raise ArgumentError("view_key must be 1-128 letters, digits, '.', '_', '/' or '-'")
-    if _redact_payload(view_key) != view_key:
+    if refuses(view_key, _redact_payload):
         raise ArgumentError(
             "that view_key carries data redaction would remove; choose a plain name"
         )
@@ -930,7 +931,7 @@ def _bar_items(args: dict[str, Any]) -> list[dict[str, str]]:
         key = _text(raw_item, "key", required=True)
         if not _BAR_KEY_RE.match(key):
             raise ArgumentError("a key is 1-64 lowercase letters, digits, '_' or '-'")
-        if _redact_payload(key) != key:
+        if refuses(key, _redact_payload):
             raise ArgumentError("that key carries data redaction would remove; choose a plain name")
         if key in RESERVED_KEYS:
             raise ArgumentError(f"key {key!r} is the workspace's own item; choose another")
@@ -950,7 +951,7 @@ def _bar_items(args: dict[str, Any]) -> list[dict[str, str]]:
         if url:
             if not url.startswith("https://"):
                 raise ArgumentError("a url must start with https://")
-            if _redact_payload(url) != url:
+            if refuses(url, _redact_payload):
                 raise ArgumentError(
                     "that url carries data redaction would remove; link a plain page"
                 )

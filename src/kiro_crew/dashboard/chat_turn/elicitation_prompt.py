@@ -25,6 +25,7 @@ from kiro_crew.agent_sdk.elicitation import (
     ELICITATION_DECLINE,
     ElicitationContentError,
 )
+from kiro_crew.security import refuses
 
 if TYPE_CHECKING:
     from kiro_crew.dashboard.chat_runner import (
@@ -75,6 +76,11 @@ def _redact_display(text: Any) -> str:
     return safe
 
 
+def _value_tainted(value: str) -> bool:
+    """Whether redaction would change *value*, or a URL in it is flagged: a safety decision."""
+    return refuses(value, _redact_display)
+
+
 def _redact_fields_for_display(fields: Any) -> tuple[list[dict[str, Any]], bool]:
     """Fields with their display text redacted, and whether a VALUE was tainted.
 
@@ -95,7 +101,7 @@ def _redact_fields_for_display(fields: Any) -> tuple[list[dict[str, Any]], bool]
                 safe[key] = _redact_display(safe[key])
         for key in _VALUE_KEYS:
             value = safe.get(key)
-            if isinstance(value, str) and _redact_display(value) != value:
+            if isinstance(value, str) and _value_tainted(value):
                 tainted = True
         options = safe.get("options")
         if isinstance(options, list):
@@ -104,7 +110,7 @@ def _redact_fields_for_display(fields: Any) -> tuple[list[dict[str, Any]], bool]
                 if not isinstance(option, dict):
                     continue
                 value = option.get("value")
-                if isinstance(value, str) and _redact_display(value) != value:
+                if isinstance(value, str) and _value_tainted(value):
                     tainted = True
                 safe_options.append({**option, "label": _redact_display(option.get("label", ""))})
             safe["options"] = safe_options
