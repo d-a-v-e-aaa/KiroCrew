@@ -477,6 +477,21 @@ def _static_substitution_output(body: str) -> str:
     return "\x00"
 
 
+def _spliced_static_outputs(text: str, flat: "re.Pattern[str]") -> str:
+    """*text* with each substitution *flat* matches replaced by its static output, quotes
+    kept, until none is left; a dynamic one stays. A splice only shortens *text*, so the
+    loop ends."""
+    done = ""
+    while text != done:
+        done, text = text, flat.sub(_static_output_or_match, text)
+    return text
+
+
+def _static_output_or_match(match: "re.Match[str]") -> str:
+    out = _static_substitution_output(next(g for g in match.groups() if g is not None))
+    return match.group(0) if out == "\x00" else out
+
+
 # An assignment word (``k=kill``): bash only honours these BEFORE the first
 # non-assignment word of a command, and their value is visible to LATER
 # commands only (expansion happens before the assignment takes effect).

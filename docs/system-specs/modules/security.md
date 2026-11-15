@@ -1131,6 +1131,36 @@ Two mechanisms make "the split changed nothing for a caller" a tested claim rath
   nothing there and `cat` only prints it. A heredoc that a shell reads
   (`bash <<'EOF'`, `cat <<'EOF' | sh`, a `cat` that writes a file), or one with an
   unquoted tag, keeps its text, so it is read as at the top level.
+  The mask copies each such body whose `)` it proves as quoted data in one step, so a
+  quote inside it (`echo "$(cat 'a"b')" ; ssh ...`) does not close the outer double
+  quote. In the copy the argv walk tokenizes, the body's own quotes become `_`, so two
+  bodies' quotes cannot pair with each other around a later `ssh`; the verb probe and the
+  function-call binder read the copy that keeps them, so a function body's `"$1"` there
+  still binds the call's argument. A body inside heredoc text keeps the reading it had before. A
+  static `echo`/`printf` output is spliced in place of its substitution with each quote,
+  and a trailing backslash, written as `_`, because bash never reads them in an output, and
+  spliced they would open or close a quote or escape the next character. `eval` and
+  `sh -c` parse an output again, quotes included, so the line with the verbatim splice is
+  judged as well, spliced once and spliced until no static `$( )` is left
+  (`$(echo $(echo 's"s"h'))`), by the outermost call and by each bound function body only
+  (`_VERBATIM_READ`), since a bound argument can form a new static `$( )`
+  (`f(){ eval "$($1 's"s"h') <this host>"; }; f echo`); nested bodies add calls linearly
+  (bodies that define and call functions grow as on main). A
+  re-parse after such a body (`echo "$(echo 'a"b')" ; bash -c "$(echo 's"s"h') -p 22 <this host> id"`,
+  the `sh -c` and `| sh` spellings, and `eval` on the next line after `"$(echo 'a"b')"`)
+  is still allowed, as on main. That verbatim reading keeps a remaining
+  body's quotes in the walk's copy too, since `eval` re-parses them
+  (`eval "$(echo $(echo 's"s"h')) <this host> id"`). The floor
+  then reads the line again exactly as it did before these rewrites (`_MAIN_READING`, which
+  every nested call inherits) and refuses when either reading refuses, so a rewrite can only
+  add refusals: no line the earlier reading refused can pass. A static splice inside heredoc
+  text keeps its quotes, as the mask leaves that text. The span readers
+  (`_double_quoted_substitution_spans`, `_proven_body_spans`, `heredoc_text_spans`) and the
+  body reader `_double_quoted_substitution_bodies` live in `shell_commands`. Within one call
+  tree each verdict is judged once (`_JUDGED`), as a bound function body re-reads the
+  bodies nested in it. The floor does not model `#` comments: a quoted `$( )` before a comment
+  whose text names ssh to this host is refused, as main refuses the same line without the
+  quote.
   Within one `is_denied` call (`call_views.sharing_views`, which this module also serves
   to its importers) both walks share one result per frame text, and `_shell_payload_walk`
   and `argv_floor_self._quoted_assignment_scripts` keep theirs in the same memo, so every

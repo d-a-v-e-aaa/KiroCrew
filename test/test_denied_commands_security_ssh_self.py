@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1274,6 +1275,143 @@ class TestSandboxEscapeSshSelf:
         ],
     )
     def test_double_quoted_substitution_rows_that_stay_allowed(self, cmd):
+        assert _denied_by(cmd.replace("%s", "local" + "host")) is None
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            # A quote inside a ``$( )`` body, or in the output spliced for it,
+            # closes nothing outside it, so the ``ssh`` after the ``;`` runs.
+            'echo "$(echo \'a"b\')" ; ssh -p 22 %s id',
+            'echo "$(cat \'a"b\')" ; ssh -p 22 %s id',
+            "echo \"$(printf '%%s' 'a\"b')\" && ssh -p 22 %s id",
+            "echo $(echo 'a\"b') ; ssh -p 22 %s id",
+            'echo "$(echo \'a"b\')"\nssh -p 22 %s id',
+            'ssh -i "$(cat \'a"b\')" %s id',
+            # Two bodies' quotes do not pair with each other around the ``ssh``.
+            'echo "$(cat \'a"b\')" ; ssh -p 22 %s id ; echo "$(cat \'c"d\')"',
+            # The function binder reads the body with its quotes, so ``"$1"`` binds.
+            'f(){ x="$(ssh "$1" id)"; }; f %s',
+            # ``eval`` parses the spliced output again, quotes included.
+            'eval "$(echo \'s"s"h\') -p 22 %s id"',
+            'eval "$(echo $(echo \'s"s"h\')) %s id"',
+            'bash -c "$(echo $(echo \'s"s"h\')) %s id"',
+            "printf '%%s\\n' \"$(echo $(echo 's\"s\"h')) %s id\" | sh",
+            "eval ssh $(echo \"'%s'\") id",
+            'echo "$(echo "it\'s")"\nscp f %s:/tmp/x',
+            # A quoted assignment script after such a body is still read whole.
+            "echo \"$(cat 'a\"b')\" ; bash -c 'x=ssh; $x %s'",
+            "echo \"$(cat 'a\"b')\" ; eval 'x=ssh; ${x} %s'",
+            "echo \"$(cat 'a\"b')\" ; sh -c 'x=scp; $x f %s:/tmp'",
+            # A comment ends at its newline, and a ``#`` inside a word starts none.
+            'echo "$(echo \'a"b\')" # x\nssh -p 22 %s id',
+            'echo "$(echo \'a"b\')"#x ; ssh -p 22 %s id',
+            # A backtick ends a comment inside its body, so the ``ssh`` after it runs.
+            'echo "$(echo \'a"b\')" ; echo `echo a #`; ssh -p 22 %s id',
+            'echo "$(echo \'a"b\')" ; x="`echo #`"; ssh -p 22 %s id',
+            # A ``#`` glued after a ``)`` or a backtick is part of the word, not a comment.
+            'echo $(:)#x; echo "$(echo \'a"b\')" ; ssh -p 22 %s id',
+            'echo `echo a`#x; echo "$(echo \'a"b\')" ; ssh -p 22 %s id',
+            # An escaped blank keeps the ``#`` in its word, so nothing is commented out.
+            'echo a\\ #y; echo "$(echo \'a"b\')" ; ssh -p 22 %s id',
+            # The line after a comment that follows a heredoc still runs.
+            'echo "$(echo \'a"b\')" ; cat <<EOF\n$(date)\nEOF\n# c\nssh -p 22 %s id',
+            # A trailing backslash in a spliced output escapes nothing after it.
+            "echo $(echo 'a\\');ssh -p 22 %s id",
+            # Main allows this, and only the verbatim reading refuses it: ``eval``
+            # reads the spliced output's quotes again.
+            'echo "$(cat \'a"b\')"\neval "$(echo \'s"s"h\') %s"',
+            # A bound argument forms a static ``$( )`` that only the bound body's
+            # own verbatim reading sees.
+            'f(){ eval "$($1 \'s"s"h\') %s"; }; echo "$(cat \'a"b\')"; f echo',
+            'echo "$(cat \'a"b\')"; f(){ eval "$($1 $(echo \'s"s"h\')) %s id"; }; f echo',
+            'f(){ echo "$(cat \'q"r\')"; eval "$(echo \'s"s"h\') $1 id"; }; f %s',
+        ],
+    )
+    def test_a_quote_inside_a_substitution_does_not_hide_a_later_command(self, cmd):
+        assert _denied_by(cmd % ("local" + "host")) == self._RULE
+
+    @pytest.mark.parametrize(
+        "level, core",
+        [
+            # A verbatim reading in each nested body would double the calls every two levels.
+            ('echo "a\'ssh$({cmd})"', 'echo "a\'x"'),
+            # A bound function body re-reads every body nested in it.
+            ('echo "$(g{i}(){{ {cmd}; }}; g{i} "$1")" ssh', 'echo "$1" ssh'),
+        ],
+    )
+    def test_nested_bodies_start_one_verbatim_reading(self, monkeypatch, level, core):
+        # Every level adds the same number of calls.
+        def nested(depth):
+            cmd = core
+            for i in range(depth):
+                cmd = level.format(i=i, cmd=cmd)
+            return 'echo "$(' + cmd + ')"'
+
+        real = _argv_floor._is_ssh_to_self
+        calls = []
+
+        def counting(*args, **kwargs):
+            calls.append(None)
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(_argv_floor, "_is_ssh_to_self", counting)
+        counts = []
+        for depth in (10, 14, 18):
+            calls.clear()
+            _argv_floor._reaches_self_over_ssh(nested(depth))
+            counts.append(len(calls))
+        assert counts[2] - counts[1] == counts[1] - counts[0]
+        assert counts[2] < 200
+        assert _argv_floor._VERBATIM_READ.get() == 0
+
+    def test_verbatim_flag_resets_when_the_reading_raises(self, monkeypatch):
+        def raise_in_reading(*_args, **_kwargs):
+            raise RuntimeError("reading")
+
+        monkeypatch.setattr(_argv_floor, "_judge_ssh_to_self", raise_in_reading)
+        with pytest.raises(RuntimeError):
+            _argv_floor._is_ssh_to_self("ssh -p 22 example.invalid id")
+        with pytest.raises(RuntimeError):
+            _argv_floor._read_in(2, "ssh -p 22 example.invalid id")
+        assert _argv_floor._VERBATIM_READ.get() == 0
+        assert _argv_floor._JUDGED.get(None) is None
+
+    def test_every_line_main_refuses_stays_refused(self):
+        # The floor refuses when either its quote-aware reading or main's reading does.
+        corpus = Path(__file__).parent / "fixtures" / "ssh_self_main_refused_corpus.json"
+        rows = json.loads(corpus.read_text(encoding="utf-8"))["rows"]
+        assert len(rows) > 1000
+        assert [row for row in rows if not is_denied(row)] == []
+
+    def test_main_reading_flag_resets_when_that_reading_raises(self, monkeypatch):
+        def raise_in_main_reading(text_lower, **_kwargs):
+            if _argv_floor._MAIN_READING.get():
+                raise RuntimeError("main reading")
+            return False
+
+        monkeypatch.setattr(_argv_floor, "_is_ssh_to_self", raise_in_main_reading)
+        with pytest.raises(RuntimeError):
+            _argv_floor._reaches_self_over_ssh("ssh -p 22 example.invalid id")
+        assert _argv_floor._MAIN_READING.get() is False
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            'echo "$(echo \'a"b\')" ; echo ok',
+            'echo "$(echo \'a"b\')" ; ssh -p 22 example.com id',
+            "git commit -m \"$(cat <<'EOF'\nfix: 'a\"b'\nEOF\n)\" ; git log -1",
+            # Bash dials the word ``local'host``, which is not this host.
+            'ssh $(echo "local\'host") id',
+            # Bash runs nothing after the ``#``; the floor reads this one as main does.
+            'echo "$(echo "it\'s")" # bash -c \'x=ssh; $x %s id\'',
+            # Heredoc text keeps its old reading, a quote in a spliced output included.
+            "cat > f.sh <<'EOF'\necho \"$(echo 'a\"b')\" # c\nDon't ssh %s\nEOF\necho 'ssh %s id'",
+            "cat > f.sh <<'EOF'\necho \"$(echo 'a\"b')\" # c\nEOF\n# ssh %s id",
+            "# don't run this\ncat <<'EOF' > notes.txt\nIt's fine\nEOF\necho 'then ssh %s'",
+        ],
+    )
+    def test_a_quote_inside_a_substitution_rows_that_stay_allowed(self, cmd):
         assert _denied_by(cmd.replace("%s", "local" + "host")) is None
 
     @pytest.mark.parametrize("tag", ["'EOF'", '"EOF"', "\\EOF"])

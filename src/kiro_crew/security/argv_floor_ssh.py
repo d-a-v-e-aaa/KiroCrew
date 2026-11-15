@@ -18,6 +18,7 @@ in ``argv_floor_self`` and the host verdicts in ``argv_floor_hosts``, both below
 
 from __future__ import annotations
 
+import contextvars
 import fnmatch
 import re
 
@@ -30,17 +31,21 @@ from .argv_floor_hosts import _GLOB_CHARS, _host_is_self
 from .argv_floor_self import (
     _quoted_assignment_scripts,
     _self_token_frames,
+    _spliced_static_outputs,
+    _static_output_or_match,
     _static_substitution_output,
 )
-from .shell_commands import read_commands
+from .shell_commands import (
+    _double_quoted_substitution_bodies,
+    _proven_body_spans,
+    heredoc_text_spans,
+)
 from .shell_normalizer import (
     _argv_programs,
     _cut_at_operator,
     _data_consumer_exempt,
     _decode_shell_quoted_literals,
     _ends_argv,
-    _iter_shell_chars,
-    _matching_close_paren,
     _only_single_quoted_openers,
     _program_basename,
     _resolve_param_defaults,
@@ -194,65 +199,7 @@ _QUOTED_SEP_SENTINELS = {
 }
 
 
-def _double_quoted_substitution_bodies(text: str) -> "list[str]":
-    """The body of each ``$(...)`` that sits directly inside double quotes in *text*.
-
-    :func:`_mask_quoted_separators` keeps double-quoted text as data, but bash runs
-    such a body as a command line of its own, in a new quote context. Only an
-    unpaired ``$`` opens one (``$$`` is the PID, ``\\$`` is text); the body ends at
-    its own matching ``)``, or runs to the end of *text* when none is found. A ``)``
-    in a heredoc body that :func:`read_commands` finds there does not end it. The
-    text that a bare ``cat`` prints from a quoted-tag heredoc is cut out of each
-    body (:func:`_without_quoted_heredoc_text`).
-    """
-    bodies: list[str] = []
-    i, state = 0, 0
-    while i < len(text):
-        dollars = 0
-        for step in _iter_shell_chars(text[i:], state):
-            at = i + step.offset
-            dollars = dollars + 1 if step.state == 2 and step.text == "$" else 0
-            if dollars % 2 and text.startswith("(", at + 1):
-                rest = text[at + 2 :]
-                commands = read_commands(rest, heredocs=True) if "<<" in rest else []
-                for doc in [doc for command in commands for doc in command.heredocs]:
-                    blank = re.sub("[^\n]", " ", rest[doc.start : doc.end])
-                    rest = rest[: doc.start] + blank + rest[doc.end :]
-                end, proven = _matching_close_paren(rest, 0)
-                bodies.append(text[at + 2 : at + 1 + end] if proven else text[at + 2 :])
-                i, state = (at + 2 + end if proven else len(text)), 2
-                break
-        else:
-            break
-    return [_without_quoted_heredoc_text(body) for body in bodies]
-
-
-def _without_quoted_heredoc_text(body: str) -> str:
-    """*body* with the text of each quoted-tag heredoc that a bare ``cat`` prints cut out.
-
-    Bash expands nothing in such a text, and a ``cat`` that writes to no file and
-    pipes to nothing only prints it. Every other heredoc keeps its text, so a shell
-    fed one (``bash <<'EOF'``, ``cat <<'EOF' | sh``) is read as before.
-    """
-    if "<<" not in body:
-        return body
-    docs = [
-        doc
-        for cmd in read_commands(body, heredocs=True)
-        if [word.raw for word in cmd.argv] == ["cat"]
-        and all(word.raw.startswith("<<") for word, _target in cmd.redirects)
-        and not cmd.separator.startswith("|")
-        for doc in cmd.heredocs
-        if doc.quoted
-    ]
-    cut = len(body)
-    for doc in sorted(docs, key=lambda doc: doc.start, reverse=True):
-        if doc.end <= cut:
-            body, cut = body[: doc.start] + body[doc.end :], doc.start
-    return body
-
-
-def _mask_quoted_separators(text: str) -> str:
+def _mask_quoted_separators(text: str, *, blank_bodies: bool = False) -> str:
     """Rewrite quoted/escaped ``_ends_argv`` boundary chars in *text* to sentinels.
 
     Single-pass quote-state scan over the RAW source:
@@ -262,7 +209,8 @@ def _mask_quoted_separators(text: str) -> str:
       ordinary character.
     * inside double quotes -- boundary chars are literal data, so they become
       sentinels; a backslash does not change a separator's literalness, so each
-      character is handled on its own.
+      character is handled on its own. A proven ``$( )`` body there is copied the
+      same way in one step, so a quote inside it never closes the outer quote.
     * outside quotes -- a backslash escapes the next character, so an escaped
       boundary char is data and becomes a sentinel (the backslash is kept so
       shlex still de-escapes downstream, and an escaped quote never opens a
@@ -281,10 +229,20 @@ def _mask_quoted_separators(text: str) -> str:
     """
     out: list[str] = []
     quote: str | None = None
+    # A quote in a proven double-quoted ``$( )`` body closes nothing outside it. With
+    # *blank_bodies* its quotes become ``_`` so the shlex walk cannot pair two bodies'
+    # quotes; the function-call binder reads the copy that keeps them.
+    spans = {} if _MAIN_READING.get() else _proven_body_spans(text)
     i = 0
     n = len(text)
     while i < n:
         ch = text[i]
+        if quote == '"' and i in spans:
+            body = text[i : spans[i]]
+            body = body.replace('"', "_").replace("'", "_") if blank_bodies else body
+            out.extend(_QUOTED_SEP_SENTINELS.get(c, c) for c in body)
+            i = spans[i]
+            continue
         if quote is None:
             if ch == "\\" and i + 1 < n:
                 # Escaped char: an escaped separator is data (mask it); keep the
@@ -1006,17 +964,72 @@ def _function_call_binds_self(text: str) -> bool:
                     bound = bound.replace("$%d" % i, arg)
             if bound != body and _is_ssh_to_self(bound):
                 return True
+            # A bound argument can form a static ``$( )`` (``$($1 's"s"h')``) no verbatim
+            # reading of the line saw, so the bound body gets one of its own.
+            verbatim = _spliced_static_outputs(bound, _FLAT_SUBSTITUTION_RE)
+            if (
+                verbatim != bound != body
+                and not _MAIN_READING.get()
+                and _read_in(2, verbatim, False)
+            ):
+                return True
     return False
+
+
+# Set while the floor reads a line as main did: no body span copied in one step and
+# no quote rewriting in a splice. Recursion inherits it, so that reading stays whole.
+_MAIN_READING = contextvars.ContextVar("ssh_floor_main_reading", default=False)
 
 
 def _reaches_self_over_ssh(text_lower: str) -> bool:
     """:func:`_is_ssh_to_self` on *text_lower* and on each quoted assignment script in it,
-    read whole: the separator mask would turn a script's own separators into data."""
+    read whole: the separator mask would turn a script's own separators into data. Either
+    the quote-aware reading or main's unchanged one (*_MAIN_READING*) refusing refuses."""
     scripts = _quoted_assignment_scripts(text_lower)
-    return _is_ssh_to_self(text_lower, own_line=True) or any(map(_is_ssh_to_self, scripts))
+    if _is_ssh_to_self(text_lower, own_line=True) or any(map(_is_ssh_to_self, scripts)):
+        return True
+    token = _MAIN_READING.set(True)
+    try:
+        return _is_ssh_to_self(text_lower, own_line=True) or any(map(_is_ssh_to_self, scripts))
+    finally:
+        _MAIN_READING.reset(token)
 
 
-def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
+# 0 outside a call tree, 1 inside, 2 under a verbatim reading, which only the outermost call
+# and a bound function body start: one per nested body doubles calls every two levels.
+_VERBATIM_READ = contextvars.ContextVar("ssh_floor_verbatim_read", default=0)
+# Each verdict in one call tree, judged once: a bound body re-reads the bodies nested in it.
+_JUDGED: "contextvars.ContextVar[dict[tuple, bool]]" = contextvars.ContextVar("ssh_floor_judged")
+
+
+def _read_in(state: int, text_lower: str, quotes_literal: "bool | None" = None) -> bool:
+    token = _VERBATIM_READ.set(state)
+    try:
+        return _is_ssh_to_self(text_lower, quotes_literal=quotes_literal)
+    finally:
+        _VERBATIM_READ.reset(token)
+
+
+def _is_ssh_to_self(
+    text_lower: str, *, own_line: bool = False, quotes_literal: "bool | None" = None
+) -> bool:
+    """:func:`_judge_ssh_to_self`, read once per call tree (*_JUDGED*), verbatim at its root."""
+    state = _VERBATIM_READ.get()
+    seen = _JUDGED.get({}) if state else {}
+    key = (text_lower, own_line, quotes_literal, state, _MAIN_READING.get())
+    if key not in seen:
+        tokens = _VERBATIM_READ.set(state or 1), _JUDGED.set(seen)
+        try:
+            seen[key] = _judge_ssh_to_self(text_lower, own_line, quotes_literal, root=not state)
+        finally:
+            _VERBATIM_READ.reset(tokens[0])
+            _JUDGED.reset(tokens[1])
+    return seen[key]
+
+
+def _judge_ssh_to_self(
+    text_lower: str, own_line: bool, quotes_literal: "bool | None", root: bool
+) -> bool:
     """True if *text_lower* opens an ssh/scp/sftp/rsync channel to THIS host.
 
     Structural for the same reason the other floors are: the target hides
@@ -1065,6 +1078,7 @@ def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
     # has no live substitution opener before the splices below rewrite it: a spliced
     # static output (``x'y``) could otherwise pair into quotes around a live one.
     literal = own_line and _only_single_quoted_openers(text_lower)
+    literal = literal if quotes_literal is None else quotes_literal
     # Collapse empty expansions in the SOURCE so the gate and tokenization both
     # read the spliced-out spelling (``s$()sh localhost`` -> ``ssh localhost``).
     text_lower = _EMPTY_EXPANSION_RE.sub("", text_lower)
@@ -1079,12 +1093,28 @@ def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
     # hints below read it) and stays the documented run-time residual.  A
     # single-quoted spelling resolves too -- an over-approximation toward
     # deny, accepted for a deny floor.
+    docs = [] if _MAIN_READING.get() else heredoc_text_spans(text_lower)
+
     def _splice_static_substitution(match: "re.Match[str]") -> str:
         body = match.group(1) if match.group(1) is not None else match.group(2)
         out = _static_substitution_output(body)
-        return match.group(0) if out == "\x00" else out
+        # Spliced quotes would open or close one (``"$(echo 'a"b')" ; ssh``) and a
+        # trailing backslash would escape the next character; bash reads neither. Heredoc
+        # text keeps its old reading, as the mask leaves it.
+        if out == "\x00" or _MAIN_READING.get() or any(a <= match.start() < e for a, e in docs):
+            return match.group(0) if out == "\x00" else out
+        out = out.replace('"', "_").replace("'", "_")
+        return out[:-1] + "_" if out.endswith("\\") else out
 
-    text_lower = _FLAT_SUBSTITUTION_RE.sub(_splice_static_substitution, text_lower)
+    # ``eval``/``sh -c`` re-parse an output's quotes, so the outermost call (*root*) also judges
+    # one and repeated verbatim splices (``$(echo $(echo 's"s"h'))``), *quotes_literal* set.
+    if quotes_literal is None:
+        one = _FLAT_SUBSTITUTION_RE.sub(_static_output_or_match, text_lower)
+        verbatim = _spliced_static_outputs(one, _FLAT_SUBSTITUTION_RE)
+        text_lower = _FLAT_SUBSTITUTION_RE.sub(_splice_static_substitution, text_lower)
+        for spliced in dict.fromkeys((one, verbatim)) if root else ():
+            if spliced != text_lower and _read_in(2, spliced, literal):
+                return True
     # Substitute ``$a``/``${a}`` from literal same-line assignments
     # (``a=s; ${a}sh localhost`` -> ``ssh localhost``) so neither the verb nor
     # the operand can be spliced from statically-known text.  Values are
@@ -1099,14 +1129,16 @@ def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
     # real target and let the connection through.  It is restored only at the
     # faithful operand/routing checks below; recursion sites receive the masked
     # text unchanged (the mask is idempotent -- their quotes are already gone).
-    text_lower = _mask_quoted_separators(text_lower)
+    kept = _mask_quoted_separators(text_lower)
+    # The verbatim reading keeps body quotes, which ``eval`` re-parses (nested ``$( )``).
+    text_lower = _mask_quoted_separators(text_lower, blank_bodies=quotes_literal is None)
     # Quote/backslash splices survive into the tokens (shlex rejoins them) but
     # defeat this raw-substring gate, so probe a copy with them stripped out.
     # Bash decodes ANSI-C quoting ($'\x73\x73\x68' -> ssh)
     # before exec, and the operand walk's tokenizer resolves it too -- so the
     # gate guarding that walk probes the DECODED text, or a verb spelling the
     # walk would deny slips past the gate the walk never gets to correct.
-    probe = _decode_shell_quoted_literals(text_lower)
+    probe = _decode_shell_quoted_literals(kept)
     probe = probe.replace('"', "").replace("'", "").replace("\\", "")
     # bash substitutes ``${VAR:-word}`` defaults before exec, so the verb can
     # be spliced from statically-known text (``s${U:-s}h`` -> ``ssh``).
@@ -1118,7 +1150,7 @@ def _is_ssh_to_self(text_lower: str, *, own_line: bool = False) -> bool:
     # Bind one level of function-call arguments (``f(){ ssh "$1"
     # id; }; f localhost``) and recurse on the bound body -- the literal call
     # argument is the destination the walk below cannot see through ``$1``.
-    if _function_call_binds_self(text_lower):
+    if _function_call_binds_self(kept):
         return True
     # The mask above keeps double-quoted text as data, but bash runs a ``$(...)``
     # there, so each such body is judged as a command line of its own.

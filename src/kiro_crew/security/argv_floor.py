@@ -207,6 +207,8 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         _self_token_frames,
         _SelfModuleScan,
         _shell_payload_sources,
+        _spliced_static_outputs,
+        _static_output_or_match,
         _static_substitution_output,
     )
     from kiro_crew.security.argv_floor_ssh import (  # noqa: F401
@@ -225,7 +227,9 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         _FUNCTION_DEF_RE,
         _HOSTNAME_SUBSTITUTION_HINTS,
         _HOSTNAME_VARIABLE_FORMS,
+        _JUDGED,
         _LINE_ASSIGNMENT_RE,
+        _MAIN_READING,
         _QUOTED_SEP_SENTINELS,
         _RSYNC_RSH_ASSIGN_RE,
         _SSH_COMMAND_OPTION_KEYS,
@@ -236,18 +240,20 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         _VAR_REFERENCE_RE,
         _VERB_FOLD_AMBIGUOUS_OPT_LETTERS,
         _VERB_VALUE_TAKING_OPT_LETTERS,
+        _VERBATIM_READ,
         _arith_int_literal_repl,
         _brace_alternatives,
         _brace_expansions,
         _command_value_names_self_endpoint,
-        _double_quoted_substitution_bodies,
         _function_call_binds_self,
         _glob_can_name_ssh_verb,
         _is_ssh_to_self,
+        _judge_ssh_to_self,
         _mask_quoted_separators,
         _operand_targets_self,
         _proxyjump_value_targets_self,
         _reaches_self_over_ssh,
+        _read_in,
         _remote_forward_value_targets_self,
         _resolve_line_assignments,
         _routing_option_key_value_targets_self,
@@ -255,7 +261,6 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         _ssh_family_verb,
         _ssh_verb_basename,
         _unmask_separators,
-        _without_quoted_heredoc_text,
     )
 if TYPE_CHECKING:  # names it serves from outside its owners, from their homes
     from kiro_crew.atomic_write import on_event_loop as _event_loop_running  # noqa: F401
@@ -281,7 +286,11 @@ if TYPE_CHECKING:  # names it serves from outside its owners, from their homes
         _decoded_b64_literal_sources,
         _has_self_importing_inline_program,
     )
-    from kiro_crew.security.shell_commands import read_commands  # noqa: F401
+    from kiro_crew.security.shell_commands import (  # noqa: F401
+        _double_quoted_substitution_bodies,
+        _proven_body_spans,
+        heredoc_text_spans,
+    )
     from kiro_crew.security.shell_normalizer import (  # noqa: F401
         _AMBIGUOUS_EXPANSION_RE,
         _PROCESS_SUBSTITUTION_OPENERS,

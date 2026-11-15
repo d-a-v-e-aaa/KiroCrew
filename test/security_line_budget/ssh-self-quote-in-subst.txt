@@ -1,0 +1,13 @@
++144
+A quote inside a double-quoted `$( )` body, or in a static `echo`/`printf` output the
+ssh-to-self floor splices in place of a substitution, closed the outer quote in the
+floor's reading, so a later `; ssh -p 22 <this host> id` read as quoted text. The
+floor now takes each proven body's span (`_double_quoted_substitution_spans`) and
+masks it in one step (quotes blanked in the walk's copy), skipping bodies in heredoc text, and it
+splices a static output with each quote and a trailing backslash written as `_`. Because `eval` and
+`sh -c` parse an output again, the line with the verbatim splice is judged as well. The floor also reads the
+line as before these rewrites (`_MAIN_READING`) and refuses if either reading does. A
+splice in heredoc text keeps its quotes. The span readers moved to `shell_commands`. Only the
+outermost call and each bound function body judge the verbatim reading (`_VERBATIM_READ`), so nested bodies add calls
+linearly (bodies that define and call functions grow as on main). `_spliced_static_outputs` repeats that splice until no static `$( )` is left. Each verdict
+in one call tree is judged once (`_JUDGED`).
