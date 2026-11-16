@@ -358,7 +358,9 @@ class WhatsAppRenderer(Renderer):
         return elapsed >= wa_client.EDIT_WINDOW_S
 
     async def _open_live(self, text: str) -> None:
-        message_id = await self._transport.send_message(self._chat, text)
+        # *text* is a chunk ``_rendered_chunks`` already converted, so it goes out
+        # as it is (``edit_text`` does the same).
+        message_id = await self._transport.send_rendered(self._chat, text)
         now = asyncio.get_running_loop().time()
         self._live_id = message_id
         self._live_sent_at = now

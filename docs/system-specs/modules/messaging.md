@@ -7113,8 +7113,12 @@ DELIMITER positions rather than overlap, because emphasis legitimately spans a c
 span (` **a `b` c** `) and skipping the whole match there would leave visible `**`
 litter. `files.py::rejection_note` is built on this: the renderer's send path
 converts everything it puts on the wire (`transport.send_message` →
-`client.send_text` → `render_chunks`) and there is no unconverted send to reach
-for, so the note is written to survive that round trip byte-identically instead.
+`client.send_text` → `render_chunks`), so the note is written to survive that
+round trip byte-identically. A chunk `_rendered_chunks` already converted is the
+one exception: `_open_live` sends it through `transport.send_rendered`
+(`client.send_text(..., rendered=True)`), as `edit_text` does, because the
+conversion is not idempotent: Markdown `*x*` is italic and WhatsApp's is bold, so a
+second pass would read the first pass's bold as italic.
 
 **`_show` is the only thing that may advance `_sealed_count`.** Its contract is
 "this chunk is on screen, and only then does the count advance", and it exists
