@@ -22344,7 +22344,12 @@
       "open_website": "{{href}} 열기",
       "keep_blank_hint": "저장된 내용을 유지하려면 비밀번호와 메모를 비워 두세요.",
       "copy_failed": "복사하지 못했습니다. 텍스트를 선택해 직접 복사하세요.",
-      "reference_hint": "이 항목을 MCP 서버에서 쓰려면 그 서버의 환경에 참조를 붙여 넣으세요. #username은 한 필드를 가리킵니다."
+      "reference_hint": "이 항목을 MCP 서버에서 쓰려면 그 서버의 환경에 참조를 붙여 넣으세요. #username은 한 필드를 가리킵니다.",
+      "rotate_by_label": "교체 기한 (선택 사항)",
+      "rotate_by_hint": "기한이 지나면 패널에 이 시크릿이 표시됩니다. 기한 없이 새 값을 저장하면 기한이 지워집니다.",
+      "rotate_by_note": "{{date}}까지 교체",
+      "rotation_due": "교체 기한 지남",
+      "rotation_due_aria": "{{name}} 교체 기한 지남: 교체 기한 {{date}}이(가) 지났습니다"
     }
   },
   "store": {

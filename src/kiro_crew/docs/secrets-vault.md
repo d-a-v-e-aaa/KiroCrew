@@ -39,6 +39,12 @@ Use **Settings → Secrets** in the dashboard. The panel lists the names it hold
 adds a new entry, and deletes one. It never shows a stored value back to you —
 listing returns names only, so a screenshot of the panel leaks nothing.
 
+The add form also takes an optional **Rotate by** date. The entry then shows
+"Rotate by" with that date, and once the date has passed, a **Rotation due**
+chip, so a key you meant to replace does not go stale unnoticed. The date sits
+beside the encrypted value, never inside it, and it changes nothing about how
+the entry is used. Saving a new value without a date clears it. Nothing changes
+until you set one, so there is no setting for it.
 With **Secrets vault redesign** turned on in **Settings → Developer → Feature
 Previews**, the tab changes shape. The left list holds every entry the vault
 knows, grouped into the credentials Kiro Crew uses by name and your

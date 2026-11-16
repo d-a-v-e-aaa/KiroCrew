@@ -22344,7 +22344,12 @@
       "open_website": "打开 {{href}}",
       "keep_blank_hint": "将密码和笔记留空即可保留已存的内容。",
       "copy_failed": "无法复制。请选中文本自行复制。",
-      "reference_hint": "将引用粘贴到 MCP 服务器的环境中，即可在那里使用此条目。#username 选取一个字段。"
+      "reference_hint": "将引用粘贴到 MCP 服务器的环境中，即可在那里使用此条目。#username 选取一个字段。",
+      "rotate_by_label": "轮换期限（可选）",
+      "rotate_by_hint": "日期过后，面板会标记此密钥。保存新值时不填日期会清除该日期。",
+      "rotate_by_note": "在 {{date}} 前轮换",
+      "rotation_due": "需要轮换",
+      "rotation_due_aria": "{{name}} 需要轮换：轮换期限 {{date}} 已过"
     }
   },
   "store": {

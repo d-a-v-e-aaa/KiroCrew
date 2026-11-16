@@ -23458,7 +23458,12 @@
       "open_website": "Apri {{href}}",
       "keep_blank_hint": "Lascia vuoti password e note per mantenere quanto salvato.",
       "copy_failed": "Copia non riuscita. Seleziona il testo e copialo tu.",
-      "reference_hint": "Incolla un riferimento nell’ambiente di un server MCP per usare lì questo elemento. #username sceglie un campo."
+      "reference_hint": "Incolla un riferimento nell’ambiente di un server MCP per usare lì questo elemento. #username sceglie un campo.",
+      "rotate_by_label": "Ruota entro il (facoltativo)",
+      "rotate_by_hint": "Il pannello segnala questo segreto quando la data è passata. Salvare un nuovo valore senza data la rimuove.",
+      "rotate_by_note": "Ruota entro il {{date}}",
+      "rotation_due": "Rotazione scaduta",
+      "rotation_due_aria": "Rotazione scaduta per {{name}}: la data di rotazione {{date}} è passata"
     }
   },
   "store": {

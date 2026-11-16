@@ -23458,7 +23458,12 @@
       "open_website": "Ouvrir {{href}}",
       "keep_blank_hint": "Laisse vides le mot de passe et les notes pour garder ce qui est enregistré.",
       "copy_failed": "Impossible de copier. Sélectionne le texte et copie-le toi-même.",
-      "reference_hint": "Colle une référence dans l’environnement d’un serveur MCP pour y utiliser cet élément. #username choisit un champ."
+      "reference_hint": "Colle une référence dans l’environnement d’un serveur MCP pour y utiliser cet élément. #username choisit un champ.",
+      "rotate_by_label": "Renouveler avant le (facultatif)",
+      "rotate_by_hint": "Le panneau signale ce secret une fois la date passée. Enregistrer une nouvelle valeur sans date la supprime.",
+      "rotate_by_note": "Renouveler avant le {{date}}",
+      "rotation_due": "Renouvellement requis",
+      "rotation_due_aria": "Renouvellement requis pour {{name}} : la date de renouvellement {{date}} est passée"
     }
   },
   "store": {

@@ -22901,7 +22901,12 @@
       "open_website": "{{href}} öffnen",
       "keep_blank_hint": "Lass Passwort und Notizen leer, um die gespeicherten Werte zu behalten.",
       "copy_failed": "Kopieren fehlgeschlagen. Markiere den Text und kopiere ihn selbst.",
-      "reference_hint": "Füge eine Referenz in die Umgebung eines MCP-Servers ein, um diesen Eintrag dort zu nutzen. #username wählt ein Feld."
+      "reference_hint": "Füge eine Referenz in die Umgebung eines MCP-Servers ein, um diesen Eintrag dort zu nutzen. #username wählt ein Feld.",
+      "rotate_by_label": "Rotieren bis (optional)",
+      "rotate_by_hint": "Das Panel markiert dieses Geheimnis, sobald das Datum verstrichen ist. Wird ein neuer Wert ohne Datum gespeichert, wird es entfernt.",
+      "rotate_by_note": "Rotieren bis {{date}}",
+      "rotation_due": "Rotation fällig",
+      "rotation_due_aria": "Rotation fällig für {{name}}: Das Rotationsdatum {{date}} ist verstrichen"
     }
   },
   "store": {

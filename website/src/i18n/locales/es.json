@@ -23458,7 +23458,12 @@
       "open_website": "Abrir {{href}}",
       "keep_blank_hint": "Deja en blanco la contraseña y las notas para conservar lo guardado.",
       "copy_failed": "No se pudo copiar. Selecciona el texto y cópialo tú.",
-      "reference_hint": "Pega una referencia en el entorno de un servidor MCP para usar este elemento allí. #username elige un campo."
+      "reference_hint": "Pega una referencia en el entorno de un servidor MCP para usar este elemento allí. #username elige un campo.",
+      "rotate_by_label": "Rotar antes del (opcional)",
+      "rotate_by_hint": "El panel marca este secreto cuando pasa la fecha. Guardar un valor nuevo sin fecha la elimina.",
+      "rotate_by_note": "Rotar antes del {{date}}",
+      "rotation_due": "Rotación pendiente",
+      "rotation_due_aria": "Rotación pendiente para {{name}}: la fecha de rotación {{date}} ya pasó"
     }
   },
   "store": {

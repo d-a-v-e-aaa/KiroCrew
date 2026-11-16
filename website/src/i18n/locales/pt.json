@@ -23458,7 +23458,12 @@
       "open_website": "Abrir {{href}}",
       "keep_blank_hint": "Deixe em branco a senha e as notas para manter o que está salvo.",
       "copy_failed": "Não foi possível copiar. Selecione o texto e copie você mesmo.",
-      "reference_hint": "Cole uma referência no ambiente de um servidor MCP para usar este item lá. #username escolhe um campo."
+      "reference_hint": "Cole uma referência no ambiente de um servidor MCP para usar este item lá. #username escolhe um campo.",
+      "rotate_by_label": "Rotacionar até (opcional)",
+      "rotate_by_hint": "O painel sinaliza este segredo quando a data passa. Salvar um novo valor sem data a remove.",
+      "rotate_by_note": "Rotacionar até {{date}}",
+      "rotation_due": "Rotação pendente",
+      "rotation_due_aria": "Rotação pendente para {{name}}: a data de rotação {{date}} já passou"
     }
   },
   "store": {
