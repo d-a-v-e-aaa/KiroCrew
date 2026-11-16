@@ -159,7 +159,10 @@ def _pod_start_reply(args: dict[str, Any], _pu_resp: dict[str, Any], verb: str) 
         _pu_lines.append(f"limits: memory={_pu_resp.get('memory')} cpu={_pu_resp.get('cpu')}")
     if _pu_token:
         _pu_lines.append(f"token: {_pu_token}  ({_pod_token_limits(_pu_resp)})")
-        _pu_lines.append(f"open: {_pu_base}/?token={_pu_token}")
+        # The link is printed without the token, so the token stands in the reply
+        # once and a copied link carries no credential. The pod takes it only as
+        # this query, for one short window, then keeps a cookie.
+        _pu_lines.append(f"open: {_pu_base}/?token=<token>  (the token above)")
         _pu_lines.append(
             "Past its window the pod refuses the token as expired; call pod_up "
             "again (the pod keeps running) for a fresh one."
@@ -293,6 +296,12 @@ async def handle_agent_tool(request: web.Request) -> web.Response:
             {"ok": False, "code": "unknown_tool", "error": "not a Dev Fleet agent tool"},
             status=404,
         )
+    if tool != "pod_ls":
+        # The gateway checks arguments against the declaration, but this route is
+        # reachable on its own: a missing or blank name is a 400, not a KeyError.
+        _, bad_name = agent_pod_api._clean_name(args.get("worktree"))
+        if bad_name is not None:
+            return bad_name
     refusal = await agent_pod_api.enabled_refusal()
     if refusal is not None:
         worktree = args.get("worktree")
