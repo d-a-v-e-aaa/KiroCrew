@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         render_nudge_message,
         sel,
         spawn_guarded_turn,
+        terminal_wake_line,
     )
 
 
@@ -244,6 +245,7 @@ async def _fire_dashboard_nudge(
         if self._work_ledger_wake_loop(loop, wake_message)
         else ""
     )
+    _terminal_line = ""
     if wake_message is None:
         # Snapshot message, sentinel AND config generation TOGETHER, before
         # the compose_nudge_body() await: a concurrent PATCH during that
@@ -264,6 +266,11 @@ async def _fire_dashboard_nudge(
             # read, so the conductor was not told which item had moved and spent
             # a ``work_ledger_read`` finding out.
             tagged = f"{_wake_text}\n\n{tagged}"
+        # The watched pull request ended: this is the owed final turn, and its
+        # result goes first so the agent reports rather than waits.
+        _terminal_line = terminal_wake_line(loop)
+        if _terminal_line:
+            tagged = f"{_terminal_line}\n\n{tagged}"
         # Skill triggers read the loop's own message: the cycle header and the
         # ledger news are Kiro Crew's words, so "patrol budget" in the header
         # must not load a skill the loop never asked for.
@@ -312,6 +319,8 @@ async def _fire_dashboard_nudge(
         # per-field scrub at this sink.
         shown = render_nudge_message(banner, loop.stop_sentinel_path)
         visible = f"[auto-nudge cycle {loop.cycle_count + 1}]\n{shown}"
+        if _terminal_line:
+            visible = f"{_terminal_line}\n\n{visible}"
     else:
         visible = tagged
     # Deferred import for the cycle the steer path documents.
@@ -443,7 +452,16 @@ async def _start_dashboard_wake_turn(
     # An attended slot (any user session with a monitor loop) is passed
     # straight through, so babysit loops on human sessions are unaffected.
     admission: asyncio.Future[MonitorDispatchResult] | None = None
-    if completion_hook is not None:
+    # An owed final turn settles the watch once delivered, so "delivered" must
+    # mean the turn STARTED: a queued unattended turn that times out behind the
+    # cap never runs, and reporting it dispatched would stop the watch with the
+    # news unsent. It waits for the start the way a structured wake does.
+    owed_terminal = (
+        wake_message is None
+        and completion_hook is None
+        and bool(getattr(getattr(loop, "monitor", None), "terminal_pending", ""))
+    )
+    if completion_hook is not None or owed_terminal:
         admission = asyncio.get_running_loop().create_future()
 
     def _settle_admission(result: MonitorDispatchResult) -> None:
@@ -566,6 +584,8 @@ async def _start_dashboard_wake_turn(
         if completion_hook is not None and not await completion_hook.authorize():
             mark_turn_unstarted(turn_slot)
             return
+        if owed_terminal:
+            _settle_admission(MonitorDispatchResult.DISPATCHED)
         # NO AUDIENCE FENCE for the work-ledger wake, by construction: the
         # wake carries ``wake_brief`` lines
         # and a ``work_ledger_read`` pointer, so there is no worker-authored
