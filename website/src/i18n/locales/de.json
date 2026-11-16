@@ -17220,6 +17220,24 @@
         "tools_count_one": "{{n}} Werkzeug",
         "tools_count_other": "{{n}} Werkzeuge"
       },
+      "mcpTryTool": {
+        "cancel": "Abbrechen",
+        "confirm_text": "Der Server kennzeichnet dieses Tool nicht als schreibgeschützt, es kann also etwas ändern. Trotzdem ausführen?",
+        "help": "Ein Tool auswählen, seine Argumente ausfüllen und es einmal ausführen, um das unveränderte Ergebnis zu sehen. Jeder Lauf startet den Server und beendet ihn danach. Das Ergebnis wird wie ein Chatverlauf geschwärzt.",
+        "invalid_field": "Den Wert von {{name}} prüfen.",
+        "invalid_json": "Die Argumente sind kein gültiges JSON.",
+        "load_tools": "Tools laden",
+        "no_tools": "Dieser Server listet keine Tools.",
+        "not_set": "(nicht gesetzt)",
+        "raw_arguments": "Tool-Argumente als JSON",
+        "run": "Tool ausführen",
+        "run_anyway": "Ausführen",
+        "server": "Zu testender Server",
+        "title": "Ein Tool ausprobieren",
+        "tool": "Auszuführendes Tool",
+        "tool_error": "Das Tool hat einen Fehler gemeldet.",
+        "truncated": "Das Ergebnis war zu lang, daher wird nur sein Anfang angezeigt."
+      },
       "memoryGraphTab": {
         "all_count": "Alle ({{count}})",
         "gpu_rendered_visualization_of_all_kirocrew_memor": "GPU-gerenderte Visualisierung der gesamten {{productName}}-Erinnerung. Knoten sind nach Typ farblich kodiert. Zoome hinein, um Beschriftungen anzuzeigen, klicke einen Knoten an, um ihn zu prüfen, und nutze Filter, um den Fokus zu setzen.",

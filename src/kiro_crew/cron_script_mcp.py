@@ -23,7 +23,7 @@ import tempfile
 import threading
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from kiro_crew import mcp_structured_text as _structured_text
 from kiro_crew.agent_discovery import _read_agent_spec
@@ -83,9 +83,20 @@ def _joined_text(content: object) -> str:
 
 
 class McpToolClient:
-    """Minimal MCP JSON-RPC client. Spawns server subprocess, calls tool, closes."""
+    """Minimal MCP JSON-RPC client. Spawns server subprocess, calls tool, closes.
 
-    def __init__(self, server_name: str, session_key: str = ""):
+    *on_spawn*, when given, is handed the server process as soon as it starts and
+    before ``initialize`` is sent, so a caller on another thread can stop a server
+    that never answers (the reads here block).
+    """
+
+    def __init__(
+        self,
+        server_name: str,
+        session_key: str = "",
+        *,
+        on_spawn: Callable[[subprocess.Popen], None] | None = None,
+    ):
         self._server_name = server_name
         self._session_key = session_key
         resolved = _resolve_mcp_server(server_name)
@@ -183,6 +194,8 @@ class McpToolClient:
         assert self._proc.stdout is not None
         self._req_id = 0
         try:
+            if on_spawn is not None:
+                on_spawn(self._proc)
             self._rpc(
                 "initialize",
                 {
@@ -281,6 +294,10 @@ class McpToolClient:
             if msg.get("id") == req_id:
                 return msg
         raise RuntimeError(f"MCP server '{name}' did not respond to '{method}' within 1000 lines")
+
+    def rpc(self, method: str, params: dict | None = None) -> dict:
+        """Send one request and return the server's whole answer to it, unread."""
+        return self._rpc(method, params)
 
     def call_tool(self, name: str, arguments: dict) -> str:
         r = self._rpc("tools/call", {"name": name, "arguments": arguments})

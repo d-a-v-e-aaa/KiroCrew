@@ -894,6 +894,29 @@ server (see [Script and command crons](cron-and-scheduling.md#script-and-command
 On the `kas` backend, a background helper whose agent mounts no tool
 (`kirocrew-lite`) no longer starts the servers in `~/.kiro/settings/mcp.json`.
 
+### Trying one MCP tool by hand
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `mcp.tool_tester` | Show a **Try a tool** panel under the server table on the MCP Servers page. Needs a restart | `false` |
+
+Turn it on with `kirocrew config set mcp.tool_tester true` and restart the
+gateway. The panel lists the enabled local servers. **Load tools** starts the
+chosen server, reads its tool list and stops it. Pick a tool, fill in the form
+built from its input schema (a raw JSON box when the schema has more than plain
+strings, numbers, true/false values and fixed choices), and press **Run tool**.
+That starts the server again, calls the tool once and shows the raw result.
+
+- Only the dashboard owner can use it. With the setting off the route does not
+  exist.
+- A tool its server does not mark `readOnlyHint` asks for a confirm first, and the
+  gateway refuses it without one. A tool switched off on this page is refused.
+- A run that takes longer than 30 seconds is stopped. Results longer than 65,536
+  characters are cut, with a note. Credentials in the result are redacted the way a
+  chat transcript redacts them.
+- The server starts the way a script cron's `ctx.call_tool` starts it, from Kiro
+  Crew's agent config, so a remote (`url`) server cannot be tried here.
+
 ### Session summaries
 
 | Key | Description | Default |

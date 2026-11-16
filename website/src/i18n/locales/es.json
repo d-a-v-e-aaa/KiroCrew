@@ -17663,6 +17663,24 @@
         "tools_count_many": "{{n}} herramientas",
         "tools_count_other": "{{n}} herramientas"
       },
+      "mcpTryTool": {
+        "cancel": "Cancelar",
+        "confirm_text": "Su servidor no marca esta herramienta como de solo lectura, así que puede cambiar algo. ¿Ejecutarla de todos modos?",
+        "help": "Elige una herramienta, rellena sus argumentos y ejecútala una vez para ver el resultado sin procesar. Cada ejecución inicia el servidor y lo detiene después. El resultado se censura como una transcripción de chat.",
+        "invalid_field": "Revisa el valor de {{name}}.",
+        "invalid_json": "Los argumentos no son JSON válido.",
+        "load_tools": "Cargar herramientas",
+        "no_tools": "Este servidor no lista ninguna herramienta.",
+        "not_set": "(sin definir)",
+        "raw_arguments": "Argumentos de la herramienta en JSON",
+        "run": "Ejecutar herramienta",
+        "run_anyway": "Ejecutarla",
+        "server": "Servidor que probar",
+        "title": "Probar una herramienta",
+        "tool": "Herramienta que ejecutar",
+        "tool_error": "La herramienta informó de un error.",
+        "truncated": "El resultado era demasiado largo, así que solo se muestra el principio."
+      },
       "memoryGraphTab": {
         "all_count": "Todos ({{count}})",
         "gpu_rendered_visualization_of_all_kirocrew_memor": "Visualización de toda la memoria de {{productName}} renderizada por GPU. Los nodos se codifican por color según su tipo. Acerca el zoom para mostrar las etiquetas, haz clic en un nodo para inspeccionarlo y usa los filtros para enfocar.",

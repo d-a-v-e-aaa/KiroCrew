@@ -28,6 +28,7 @@ from kiro_crew.dashboard.handlers.mcp_discover import (
     api_mcp_discover_detail,
     api_mcp_discover_install,
 )
+from kiro_crew.dashboard.handlers.mcp_try_tool import api_mcp_try_tool, tool_tester_enabled
 
 
 def register(app: web.Application) -> None:
@@ -90,6 +91,10 @@ def register(app: web.Application) -> None:
     app.router.add_put("/api/mcp/custom/{name}", api_mcp_custom_update)
     app.router.add_post("/api/mcp/probe", handlers.api_mcp_probe)
     app.router.add_get("/api/mcp/probe", handlers.api_mcp_probe_cached)
+    # The owner's Try a tool panel. Registered only while mcp.tool_tester is on, so
+    # with it off the path answers as any unknown route does.
+    if tool_tester_enabled():
+        app.router.add_post("/api/mcp/try-tool", api_mcp_try_tool)
     app.router.add_post("/api/mcp/quarantine/clear", handlers.api_mcp_quarantine_clear)
     app.router.add_post("/api/mcp/measure", handlers.api_mcp_measure_start)
     app.router.add_get("/api/mcp/measure", handlers.api_mcp_measure_progress)

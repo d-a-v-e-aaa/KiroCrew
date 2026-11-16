@@ -9611,6 +9611,24 @@
         "tools_count_one": "{{n}} tool",
         "tools_count_other": "{{n}} tools"
       },
+      "mcpTryTool": {
+        "cancel": "Cancel",
+        "confirm_text": "This tool is not marked read-only by its server, so it may change something. Run it anyway?",
+        "help": "Pick a tool, fill in its arguments and run it once to see the raw result. Each run starts the server and stops it afterwards. The result is redacted like a chat transcript.",
+        "invalid_field": "Check the value of {{name}}.",
+        "invalid_json": "The arguments are not valid JSON.",
+        "load_tools": "Load tools",
+        "no_tools": "This server lists no tools.",
+        "not_set": "(not set)",
+        "raw_arguments": "Tool arguments as JSON",
+        "run": "Run tool",
+        "run_anyway": "Run it",
+        "server": "Server to try",
+        "title": "Try a tool",
+        "tool": "Tool to run",
+        "tool_error": "The tool reported an error.",
+        "truncated": "The result was too long, so only its start is shown."
+      },
       "memoryGraphTab": {
         "loading_graph_data": "Loading graph data…",
         "memory_graph": "Memory Graph",
