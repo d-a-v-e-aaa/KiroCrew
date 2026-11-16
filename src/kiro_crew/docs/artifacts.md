@@ -29,6 +29,18 @@ can list the versions, read an older one, or revert the live state to any of the
 A revert is itself recorded as a new version tagged as a rollback, so the timeline
 shows what happened rather than quietly rewinding.
 
+## Quick edits
+
+On a document artifact (markdown, plain text or HTML), the page's **More** menu has a
+**Quick edits** submenu: Shorter, Longer, Simpler wording, Proofread, and Change tone
+(More formal or More casual). Picking one sends a single preset instruction to the
+artifact's companion chat, for the text you had selected or, with no selection, the
+whole document. The agent makes the change through its normal artifact update, so it
+lands as a new version you can read or revert, and the menu says so. A selection made
+with the mouse is kept while you open the menu. If the comments panel holds a comment
+you have not sent, you are asked before the chat panel replaces it. Nothing is sent
+until you pick an item, and widgets and apps do not show the menu.
+
 ## Organizing
 
 Artifacts can be filed into folders, which nest. Moving an artifact or renaming a

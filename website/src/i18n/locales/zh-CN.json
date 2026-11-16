@@ -11929,6 +11929,16 @@
       "more_count_other": "另外 {{n}} 个"
     },
     "artifactDetailPage": {
+      "quick_edits": "快速编辑",
+      "quick_edit_scope_selection": "智能体将改写所选文本 · 保存为新版本",
+      "quick_edit_scope_document": "智能体将改写整篇文档 · 保存为新版本",
+      "quick_edit_shorter": "更简短",
+      "quick_edit_longer": "更详细",
+      "quick_edit_simpler": "措辞更简单",
+      "quick_edit_proofread": "校对",
+      "quick_edit_tone": "更改语气",
+      "quick_edit_tone_formal": "更正式",
+      "quick_edit_tone_casual": "更随意",
       "published_to_provider": "已发布到 {{provider}}",
       "open_published_page": "打开已发布的页面",
       "a_newer_version_is_available_in_the_remote_copy": "· 远端副本中有更新的版本",

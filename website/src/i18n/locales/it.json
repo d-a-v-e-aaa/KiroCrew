@@ -12467,6 +12467,16 @@
       "more_count_other": "+{{n}} altri"
     },
     "artifactDetailPage": {
+      "quick_edits": "Modifiche rapide",
+      "quick_edit_scope_selection": "L’agente riscrive il testo selezionato · salvato come nuova versione",
+      "quick_edit_scope_document": "L’agente riscrive tutto il documento · salvato come nuova versione",
+      "quick_edit_shorter": "Più breve",
+      "quick_edit_longer": "Più lungo",
+      "quick_edit_simpler": "Parole più semplici",
+      "quick_edit_proofread": "Correggi bozza",
+      "quick_edit_tone": "Cambia tono",
+      "quick_edit_tone_formal": "Più formale",
+      "quick_edit_tone_casual": "Più informale",
       "published_to_provider": "Pubblicato su {{provider}}",
       "open_published_page": "Apri la pagina pubblicata",
       "a_newer_version_is_available_in_the_remote_copy": "· è disponibile una versione più recente nella copia remota",

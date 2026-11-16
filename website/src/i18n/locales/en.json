@@ -6911,6 +6911,16 @@
       "profile_reachable_account": "{{profile}}: access reachable (account {{account}})"
     },
     "artifactDetailPage": {
+      "quick_edits": "Quick edits",
+      "quick_edit_scope_selection": "Agent rewrites the selected text · saved as a new version",
+      "quick_edit_scope_document": "Agent rewrites the whole document · saved as a new version",
+      "quick_edit_shorter": "Shorter",
+      "quick_edit_longer": "Longer",
+      "quick_edit_simpler": "Simpler wording",
+      "quick_edit_proofread": "Proofread",
+      "quick_edit_tone": "Change tone",
+      "quick_edit_tone_formal": "More formal",
+      "quick_edit_tone_casual": "More casual",
       "a_newer_version_is_available_in_the_remote_copy": "· a newer version is available in the remote copy",
       "activity": "Activity",
       "add_a_tag": "Add a tag",

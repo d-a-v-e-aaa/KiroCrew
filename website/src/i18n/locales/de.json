@@ -12198,6 +12198,16 @@
       "more_count_other": "+{{n}} mehr"
     },
     "artifactDetailPage": {
+      "quick_edits": "Schnellbearbeitung",
+      "quick_edit_scope_selection": "Der Agent überarbeitet den markierten Text · als neue Version gespeichert",
+      "quick_edit_scope_document": "Der Agent überarbeitet das ganze Dokument · als neue Version gespeichert",
+      "quick_edit_shorter": "Kürzer",
+      "quick_edit_longer": "Länger",
+      "quick_edit_simpler": "Einfachere Wortwahl",
+      "quick_edit_proofread": "Korrekturlesen",
+      "quick_edit_tone": "Ton ändern",
+      "quick_edit_tone_formal": "Förmlicher",
+      "quick_edit_tone_casual": "Lockerer",
       "published_to_provider": "Veröffentlicht in {{provider}}",
       "open_published_page": "Veröffentlichte Seite öffnen",
       "a_newer_version_is_available_in_the_remote_copy": "· eine neuere Version ist in der Remote-Kopie verfügbar",

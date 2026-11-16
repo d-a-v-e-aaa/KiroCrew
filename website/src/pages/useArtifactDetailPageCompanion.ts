@@ -78,6 +78,7 @@ export function useArtifactDetailPageCompanion({
 }) {
   const {
     slug, navigate, dispatch, setSaveError, setContextError, setContextErrorIsRefresh, contextFailureMessage,
+    setSendToSessionError,
   } = stateRead
   const { artifact } = documentRead
   /**
@@ -400,6 +401,48 @@ export function useArtifactDetailPageCompanion({
     }
   }, [connected, artifact, pendingComments, boundSlot, slug, markSent, appStore, jevAutoConsented, setPanel, sidebarUserToggledRef])
 
+  /** The session bound to this artifact, by the one cold-load rule both entry points
+   *  share: a slots snapshot still `[]` because the first fetch has not landed does not
+   *  mean nothing is bound, so ask the server. `error` is set when that ask failed;
+   *  nothing may be created on it, because the session it could not see would then
+   *  get a second one. */
+  const resolveBoundSlot = useCallback(async (): Promise<{ slot: ChatSlot | null; error: string | null }> => {
+    if (boundSlot || slotsLoaded) return { slot: boundSlot, error: null }
+    try {
+      return { slot: pickBoundSlot(await dispatch(fetchSlots()).unwrap(), slug), error: null }
+    } catch (err) {
+      // `unwrap()` throws the thunk's serialized error, a plain object rather than an Error.
+      const reason = (err as { message?: unknown } | null)?.message
+      return { slot: null, error: typeof reason === 'string' && reason ? reason : i18nT('components.errorBoundary.something_went_wrong') }
+    }
+  }, [boundSlot, slotsLoaded, slug, dispatch])
+
+  /** One edit shortcut: the preset message goes to the bound companion session
+   *  (created when there is none) as an ordinary turn, so the agent changes the
+   *  artifact through its own `artifact_update`. A refusal lands on the page's
+   *  notice stack; nothing is sent when the gateway is down. */
+  const sendEditShortcut = useCallback(async (message: string) => {
+    if (!connected || !artifact || sessionOpBusyRef.current) return
+    sessionOpBusyRef.current = true
+    try {
+      sidebarUserToggledRef.current = true
+      setSendToSessionError(null)
+      const { slot, error } = await resolveBoundSlot()
+      if (error !== null) { setSendToSessionError(error); return }
+      setPanel('chat')
+      const key = slot?.key ?? await createBoundSession()
+      if (!key) return
+      const steer = slotBusySteer(appStore.getState(), key, jevAutoConsented)
+      const receipt = await sendTurn({ message, slot: key, ...(steer ? { steer } : {}) })
+      if (receipt.status !== 'dispatched' && receipt.status !== 'queued' && receipt.status !== 'unknown') {
+        setSendToSessionError(receipt.reason || i18nT('components.errorBoundary.something_went_wrong'))
+      }
+    } finally {
+      sessionOpBusyRef.current = false
+    }
+  }, [connected, artifact, resolveBoundSlot, createBoundSession, appStore, jevAutoConsented,
+    setPanel, setSendToSessionError, sidebarUserToggledRef])
+
   /** Full-page escape hatch — routes through sendNav so a popout forwards the
    *  intent to a main window instead of remounting the dashboard in-frame. */
   const openChatFull = useCallback(() => {
@@ -411,7 +454,7 @@ export function useArtifactDetailPageCompanion({
   return {
     sendNav, slotsLoaded, boundSlot, chatCreating, connected, sessionOpBusyRef, injectedVersionRef,
     injectContextMut, createBoundSession, newCompanionChat, pendingComments, pendingCommentIds,
-    submittingComments, submitCommentsToChat, openChatFull,
+    submittingComments, submitCommentsToChat, openChatFull, sendEditShortcut, resolveBoundSlot,
   }
 }
 

@@ -12198,6 +12198,16 @@
       "more_count_other": "+{{n}} अन्य"
     },
     "artifactDetailPage": {
+      "quick_edits": "त्वरित संपादन",
+      "quick_edit_scope_selection": "एजेंट चुने हुए टेक्स्ट को दोबारा लिखता है · नए संस्करण के रूप में सहेजा जाता है",
+      "quick_edit_scope_document": "एजेंट पूरे दस्तावेज़ को दोबारा लिखता है · नए संस्करण के रूप में सहेजा जाता है",
+      "quick_edit_shorter": "छोटा करो",
+      "quick_edit_longer": "लंबा करो",
+      "quick_edit_simpler": "सरल शब्दों में",
+      "quick_edit_proofread": "प्रूफ़रीड करो",
+      "quick_edit_tone": "लहजा बदलो",
+      "quick_edit_tone_formal": "अधिक औपचारिक",
+      "quick_edit_tone_casual": "अधिक अनौपचारिक",
       "published_to_provider": "{{provider}} पर प्रकाशित",
       "open_published_page": "प्रकाशित पेज खोलो",
       "a_newer_version_is_available_in_the_remote_copy": "· रिमोट कॉपी में एक नया संस्करण उपलब्ध है",

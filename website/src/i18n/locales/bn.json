@@ -12198,6 +12198,16 @@
       "more_count_other": "+আরও {{n}}টি"
     },
     "artifactDetailPage": {
+      "quick_edits": "দ্রুত সম্পাদনা",
+      "quick_edit_scope_selection": "এজেন্ট নির্বাচিত লেখা নতুন করে লেখে · নতুন সংস্করণ হিসেবে সংরক্ষিত হয়",
+      "quick_edit_scope_document": "এজেন্ট পুরো নথি নতুন করে লেখে · নতুন সংস্করণ হিসেবে সংরক্ষিত হয়",
+      "quick_edit_shorter": "আরও সংক্ষিপ্ত",
+      "quick_edit_longer": "আরও দীর্ঘ",
+      "quick_edit_simpler": "সহজ ভাষা",
+      "quick_edit_proofread": "প্রুফরিড",
+      "quick_edit_tone": "সুর বদলান",
+      "quick_edit_tone_formal": "আরও আনুষ্ঠানিক",
+      "quick_edit_tone_casual": "আরও অনানুষ্ঠানিক",
       "published_to_provider": "{{provider}}-এ প্রকাশিত",
       "open_published_page": "প্রকাশিত পেজ খোলো",
       "a_newer_version_is_available_in_the_remote_copy": "· রিমোট কপিতে একটি নতুন সংস্করণ পাওয়া যাচ্ছে",
