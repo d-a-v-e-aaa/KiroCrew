@@ -782,6 +782,13 @@ def _memory_cmd(args: argparse.Namespace) -> None:
 def _memory_verb(args: argparse.Namespace) -> None:
     """Run one ``kirocrew memory`` verb; :func:`_memory_cmd` owns its refusals."""
     action = getattr(args, "mem_action", None)
+    # Verbs that change Crew's own stores refuse while a provider replaces them.
+    writes = action in ("migrate", "carve", "dream", "import", "forget", "restore")
+    if writes or (action == "retired" and getattr(args, "restore_id", None)):
+        from kiro_crew import cli_memory_provider
+
+        if cli_memory_provider.provider_replaces():
+            cli_memory_provider.refuse(f"kirocrew memory {action}")
     # Checked before ANY store opens, so a refused call touches nothing.
     if action == "forget":
         _refuse_forget_outside_owner_terminal()
